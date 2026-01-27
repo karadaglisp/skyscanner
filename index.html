@@ -6,7 +6,7 @@
     <title>Gemini Sky Scanner Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&display=swap');
 
         body, html {
             margin: 0;
@@ -70,26 +70,53 @@
 
         #target-info {
             position: absolute;
-            top: 50%;
+            top: 45%;
             left: 50%;
-            transform: translate(-50%, -150%);
+            transform: translate(-50%, -50%);
             text-align: center;
             text-shadow: 0 0 10px rgba(0,0,0,0.8);
             transition: opacity 0.3s;
+            width: 80%;
+            max-width: 500px;
+            pointer-events: none;
         }
 
         #target-name {
-            font-size: 32px;
+            font-size: 42px;
             font-weight: 700;
             color: #fff;
             text-shadow: 0 0 15px #0ff;
             margin: 0;
+            line-height: 1;
         }
 
         #target-sub {
-            font-size: 14px;
-            color: rgba(255,255,255,0.7);
+            font-size: 16px;
+            color: #0ff;
             margin-top: 5px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 15px;
+        }
+
+        #target-lore {
+            font-size: 18px;
+            color: rgba(255, 255, 255, 0.9);
+            font-style: italic;
+            font-weight: 500;
+            margin-bottom: 8px;
+            line-height: 1.4;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 10px;
+            border-radius: 8px;
+            backdrop-filter: blur(2px);
+        }
+
+        #target-source {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
         /* Reticle */
@@ -199,6 +226,8 @@
 </head>
 <body>
 
+    <div id="debug-log"></div>
+
     <!-- Start/Permission Screen -->
     <div id="start-overlay">
         <h1 style="color:white; font-size: 40px; margin-bottom: 10px;">SKY SCANNER</h1>
@@ -208,7 +237,6 @@
             2. Allow permissions when asked.
         </p>
         <button id="start-btn" class="glow-btn">Start Scanning</button>
-        <div id="debug-log"></div>
     </div>
 
     <!-- 3D Canvas -->
@@ -226,6 +254,8 @@
         <div id="target-info" style="opacity: 0;">
             <h2 id="target-name">ORION</h2>
             <div id="target-sub">The Hunter</div>
+            <div id="target-lore">"Begirt with many a blazing star, Stood the great giant Algebar, Orion, hunter of the beast!"</div>
+            <div id="target-source">Henry Wadsworth Longfellow (1845)</div>
         </div>
 
         <div class="hud-footer">
@@ -239,103 +269,102 @@
     <script>
         /**
          * ASTRONOMY DATA - THE 88 MODERN CONSTELLATIONS
-         * Simplified star data for shape recognition.
-         * RA: 0-24h, Dec: -90 to +90
+         * Compact Data Format: s: [[RA, Dec, Mag], ...], l: [[idx1, idx2], ...]
          */
         const CONSTELLATIONS = [
-            // --- ZODIAC ---
-            { id: 'ari', name: 'Aries', label: 'The Ram', stars: [{ra: 2.12, dec: 23.46, mag: 2.0}, {ra: 1.91, dec: 20.80, mag: 2.6}, {ra: 1.89, dec: 19.29, mag: 3.9}], lines: [[0,1], [1,2]] },
-            { id: 'tau', name: 'Taurus', label: 'The Bull', stars: [{ra: 4.60, dec: 16.51, mag: 0.85}, {ra: 5.43, dec: 28.60, mag: 1.65}, {ra: 3.79, dec: 24.10, mag: 2.8}, {ra: 4.33, dec: 15.6, mag: 3.0}], lines: [[0,3], [0,1], [0,2]] },
-            { id: 'gem', name: 'Gemini', label: 'The Twins', stars: [{ra: 7.57, dec: 31.88, mag: 1.58}, {ra: 7.74, dec: 28.02, mag: 1.14}, {ra: 6.22, dec: 22.50, mag: 3.0}, {ra: 6.75, dec: 16.5, mag: 1.9}], lines: [[0,2], [1,3], [2,3]] },
-            { id: 'cnc', name: 'Cancer', label: 'The Crab', stars: [{ra: 8.97, dec: 11.85, mag: 3.5}, {ra: 8.28, dec: 9.18, mag: 3.9}, {ra: 8.72, dec: 21.47, mag: 4.2}], lines: [[0,1], [0,2]] },
-            { id: 'leo', name: 'Leo', label: 'The Lion', stars: [{ra: 10.14, dec: 11.96, mag: 1.35}, {ra: 11.82, dec: 14.57, mag: 2.1}, {ra: 10.33, dec: 19.84, mag: 2.0}, {ra: 11.23, dec: 20.52, mag: 2.5}], lines: [[0,2], [2,3], [3,1], [0,1]] },
-            { id: 'vir', name: 'Virgo', label: 'The Virgin', stars: [{ra: 13.42, dec: -11.16, mag: 0.98}, {ra: 12.69, dec: -1.45, mag: 2.7}, {ra: 13.58, dec: -0.6, mag: 3.4}, {ra: 14.11, dec: -5.7, mag: 4.0}], lines: [[0,3], [1,2], [2,3], [1,0]] },
-            { id: 'lib', name: 'Libra', label: 'The Scales', stars: [{ra: 14.84, dec: -16.04, mag: 2.7}, {ra: 15.28, dec: -9.38, mag: 2.6}, {ra: 15.60, dec: -29.8, mag: 3.3}], lines: [[0,1], [0,2], [1,2]] },
-            { id: 'sco', name: 'Scorpius', label: 'The Scorpion', stars: [{ra: 16.49, dec: -26.43, mag: 0.96}, {ra: 16.08, dec: -19.80, mag: 2.6}, {ra: 17.56, dec: -37.10, mag: 1.6}], lines: [[1,0], [0,2]] },
-            { id: 'sgr', name: 'Sagittarius', label: 'The Archer', stars: [{ra: 18.40, dec: -34.38, mag: 1.8}, {ra: 18.92, dec: -26.3, mag: 2.0}, {ra: 18.35, dec: -25.4, mag: 2.8}, {ra: 19.16, dec: -21.0, mag: 2.0}, {ra: 18.4, dec: -21, mag: 3.0}], lines: [[0,1], [1,2], [2,0], [3,1], [2,4]] }, // Teapot
-            { id: 'cap', name: 'Capricornus', label: 'The Goat', stars: [{ra: 20.3, dec: -12.5, mag: 3.6}, {ra: 21.78, dec: -16.1, mag: 2.8}, {ra: 20.8, dec: -26.9, mag: 3.0}], lines: [[0,2], [2,1]] },
-            { id: 'aqr', name: 'Aquarius', label: 'The Water Bearer', stars: [{ra: 22.09, dec: -0.32, mag: 2.9}, {ra: 21.53, dec: -5.57, mag: 2.9}, {ra: 22.88, dec: -15.8, mag: 3.3}], lines: [[0,1], [1,2]] },
-            { id: 'psc', name: 'Pisces', label: 'The Fishes', stars: [{ra: 1.9, dec: 2.76, mag: 3.6}, {ra: 23.9, dec: -6.0, mag: 4.0}, {ra: 0.1, dec: 21, mag: 3.8}], lines: [[1,0], [0,2]] },
+            // --- ZODIAC (12) ---
+            { id: 'ari', name: 'Aries', label: 'The Ram', lore: "The Ram who bore the Golden Fleece, which Jason and the Argonauts sought.", source: "Greek Mythology / Apollonius of Rhodes (3rd Century BC)", s: [[2.12, 23.46, 2.0], [1.91, 20.8, 2.6], [1.89, 19.3, 3.9], [2.82, 27.2, 4.3]], l: [[0,1], [1,2], [0,3]] },
+            { id: 'tau', name: 'Taurus', label: 'The Bull', lore: "The Bull's head contains the Hyades, the 'Rainy Ones', whose rising foretold wet weather.", source: "Classical Mythology / Tennyson (1832)", s: [[4.60, 16.5, 0.85], [5.43, 28.6, 1.65], [3.79, 24.1, 2.8], [4.33, 15.6, 3.0], [4.47, 19, 3.5], [5.6, 21, 3.0]], l: [[0,3], [0,4], [4,2], [0,1], [1,5]] },
+            { id: 'gem', name: 'Gemini', label: 'The Twins', lore: "Fair Leda's twins, in time to stars decreed, One fought on foot, one curbed the fiery steed.", source: "Alexander Pope, 'Windsor Forest' (1713)", s: [[7.57, 31.9, 1.6], [7.74, 28.0, 1.1], [6.22, 22.5, 3.0], [6.75, 16.5, 1.9], [7.3, 32, 3.0], [7.4, 24, 3.5], [6.4, 25, 3.0], [6.9, 20, 3.5]], l: [[0,4], [4,6], [6,2], [2,7], [7,3], [1,5], [5,7]] },
+            { id: 'cnc', name: 'Cancer', label: 'The Crab', lore: "The crab that nipped Heracles' foot during his fight with the Hydra. Hera placed it among the stars.", source: "Pseudo-Apollodorus, 'Bibliotheca' (2nd Century AD)", s: [[8.97, 11.8, 3.5], [8.28, 9.2, 3.9], [8.72, 21.5, 4.2], [8.4, 18, 4.0], [9.1, 31, 4.0]], l: [[2,3], [3,0], [3,1]] },
+            { id: 'leo', name: 'Leo', label: 'The Lion', lore: "The Nemean Lion, whose golden fur was impervious to weapons. It was Hercules' first labor.", source: "Greek Mythology", s: [[10.14, 11.9, 1.4], [11.82, 14.6, 2.1], [10.33, 19.8, 2.0], [11.23, 20.5, 2.6], [9.8, 26, 3.0], [10.1, 23, 3.4], [11.0, 7, 3.3], [11.5, -0.3, 3.8]], l: [[0,2], [2,5], [5,4], [2,3], [3,1], [0,6], [0,1], [1,7]] },
+            { id: 'vir', name: 'Virgo', label: 'The Virgin', lore: "Thou, Virgin Mother, daughter of thy Son, Humble and high beyond all other creature.", source: "Dante Alighieri, 'Paradiso' (1320)", s: [[13.42, -11.2, 1.0], [12.69, -1.4, 2.7], [13.58, -0.6, 3.4], [14.11, -5.7, 4.0], [14.7, 2, 2.8], [13.0, 11, 2.8], [12.3, -3, 3.0], [13.1, -5, 3.5]], l: [[0,3], [0,7], [7,6], [6,1], [1,2], [2,3], [2,4], [1,5]] },
+            { id: 'lib', name: 'Libra', label: 'The Scales', lore: "The Scales of Justice held by Astraea (Virgo), weighing the souls of men.", source: "Roman Mythology / Manilius (1st Century AD)", s: [[14.84, -16.0, 2.7], [15.28, -9.4, 2.6], [15.60, -29.8, 3.3], [15.0, -25, 3.9]], l: [[0,1], [0,2], [0,3], [1,2]] },
+            { id: 'sco', name: 'Scorpius', label: 'The Scorpion', lore: "There is a place above, where Scorpio bent, In tail and arms surrounds a vast extent.", source: "Ovid, 'Metamorphoses' (8 AD)", s: [[16.49, -26.4, 1.0], [16.08, -19.8, 2.6], [17.56, -37.1, 1.6], [16.0, -22.6, 2.3], [17.6, -43, 1.9], [16.9, -30, 2.9], [15.8, -25, 3.0], [17.8, -39, 2.4]], l: [[1,3], [3,6], [6,0], [0,5], [5,2], [2,7], [7,4]] },
+            { id: 'sgr', name: 'Sagittarius', label: 'The Archer', lore: "The Archer, half horse and half man, aiming his arrow at the heart of the Scorpion.", source: "Eratosthenes, 'Catasterismi' (2nd Century BC)", s: [[18.40, -34.4, 1.8], [18.92, -26.3, 2.0], [18.35, -25.4, 2.8], [19.16, -21.0, 2.0], [18.4, -21, 3.0], [19.9, -27, 3.0], [20.0, -12, 3.5], [19.4, -18, 3.0]], l: [[0,1], [1,2], [2,0], [3,1], [2,4], [3,7], [3,5], [4,7]] }, 
+            { id: 'cap', name: 'Capricornus', label: 'The Goat', lore: "The Sea-Goat, associated with the god Pan who leaped into the Nile to escape Typhon.", source: "Greek Mythology / Hyginus (1st Century BC)", s: [[20.3, -12.5, 3.6], [21.78, -16.1, 2.8], [20.8, -26.9, 3.0], [20.2, -14, 4.0], [21.0, -17, 4.0], [21.4, -22, 3.7]], l: [[0,3], [3,4], [4,1], [1,5], [5,2], [2,0]] },
+            { id: 'aqr', name: 'Aquarius', label: 'The Water Bearer', lore: "Ganymede, the cup-bearer of the gods, pouring nectar from a jar.", source: "Homer, 'Iliad' (8th Century BC)", s: [[22.09, -0.3, 2.9], [21.53, -5.6, 2.9], [22.88, -15.8, 3.3], [22.3, -21, 3.7], [22.5, -8, 3.8], [23.1, -9, 3.9]], l: [[0,1], [1,4], [4,5], [4,2], [2,3]] },
+            { id: 'psc', name: 'Pisces', label: 'The Fishes', lore: "Venus and Cupid, who transformed into fish to escape the monster Typhon.", source: "Ovid, 'Fasti' (8 AD)", s: [[1.9, 2.8, 3.6], [23.9, -6.0, 4.0], [0.1, 21, 3.8], [1.2, 7, 4.0], [0.8, 11, 4.2], [23.5, 0, 4.4]], l: [[1,5], [5,0], [0,3], [3,4], [4,2]] },
 
-            // --- NORTHERN ---
-            { id: 'umi', name: 'Ursa Minor', label: 'Little Dipper', stars: [{ra: 2.53, dec: 89.26, mag: 1.97}, {ra: 16.7, dec: 82.0, mag: 4.2}, {ra: 15.8, dec: 77.8, mag: 4.3}, {ra: 17.5, dec: 71.8, mag: 3.0}, {ra: 14.8, dec: 74.1, mag: 2.0}], lines: [[0,1], [1,2], [2,3], [3,4], [4,2]] }, // Polaris + bowl
-            { id: 'uma', name: 'Ursa Major', label: 'Big Dipper', stars: [{ra: 11.06, dec: 61.75, mag: 1.8}, {ra: 11.03, dec: 56.38, mag: 2.4}, {ra: 11.89, dec: 53.69, mag: 2.4}, {ra: 12.25, dec: 57.03, mag: 3.3}, {ra: 12.90, dec: 55.95, mag: 1.8}, {ra: 13.39, dec: 54.92, mag: 2.3}, {ra: 13.79, dec: 49.31, mag: 1.9}], lines: [[0,1], [1,2], [2,3], [3,0], [3,4], [4,5], [5,6]] },
-            { id: 'cas', name: 'Cassiopeia', label: 'The Queen', stars: [{ra: 0.67, dec: 56.5, mag: 2.2}, {ra: 0.15, dec: 59.1, mag: 2.3}, {ra: 0.93, dec: 60.7, mag: 2.5}, {ra: 1.43, dec: 60.2, mag: 2.7}, {ra: 1.90, dec: 63.7, mag: 3.4}], lines: [[1,0], [0,2], [2,3], [3,4]] },
-            { id: 'cep', name: 'Cepheus', label: 'The King', stars: [{ra: 21.31, dec: 62.6, mag: 2.4}, {ra: 22.49, dec: 58.2, mag: 3.4}, {ra: 23.65, dec: 77.6, mag: 3.2}, {ra: 20.75, dec: 70, mag: 3.5}], lines: [[0,1], [1,2], [2,3], [3,0]] },
-            { id: 'dra', name: 'Draco', label: 'The Dragon', stars: [{ra: 17.53, dec: 51.5, mag: 2.2}, {ra: 19.21, dec: 67.65, mag: 3.0}, {ra: 14.07, dec: 64.37, mag: 3.6}], lines: [[0,1], [1,2]] },
-            { id: 'boo', name: 'Bootes', label: 'Herdsman', stars: [{ra: 14.26, dec: 19.18, mag: -0.05}, {ra: 14.53, dec: 38.3, mag: 3.5}, {ra: 14.7, dec: 27, mag: 2.7}, {ra: 13.75, dec: 18.4, mag: 2.7}], lines: [[0,3], [3,1], [1,2], [2,0]] }, // Arcturus kite
-            { id: 'cyg', name: 'Cygnus', label: 'The Swan', stars: [{ra: 20.69, dec: 45.28, mag: 1.25}, {ra: 20.37, dec: 40.25, mag: 2.2}, {ra: 19.51, dec: 27.96, mag: 3.0}, {ra: 19.49, dec: 45.13, mag: 2.8}, {ra: 20.77, dec: 33.97, mag: 2.4}], lines: [[0,1], [1,2], [3,1], [1,4]] },
-            { id: 'lyr', name: 'Lyra', label: 'The Harp', stars: [{ra: 18.62, dec: 38.78, mag: 0.03}, {ra: 18.83, dec: 33, mag: 3.2}, {ra: 19.28, dec: 32.7, mag: 3.5}], lines: [[0,1], [1,2], [2,0]] }, // Vega + tri
-            { id: 'aql', name: 'Aquila', label: 'The Eagle', stars: [{ra: 19.85, dec: 8.87, mag: 0.77}, {ra: 19.76, dec: 10.6, mag: 2.7}, {ra: 19.92, dec: 6.4, mag: 3.7}], lines: [[1,0], [0,2]] }, // Altair
-            { id: 'her', name: 'Hercules', label: 'The Hero', stars: [{ra: 16.5, dec: 21.5, mag: 3.5}, {ra: 17.25, dec: 24.8, mag: 3.0}, {ra: 17.25, dec: 14.4, mag: 3.0}, {ra: 18, dec: 28, mag: 3.9}], lines: [[0,1], [1,2], [2,3]] }, // Keystone
-            { id: 'aur', name: 'Auriga', label: 'Charioteer', stars: [{ra: 5.27, dec: 45.99, mag: 0.08}, {ra: 5.99, dec: 44.95, mag: 1.9}, {ra: 5.0, dec: 30, mag: 2.7}, {ra: 4.5, dec: 33, mag: 3.0}], lines: [[0,1], [1,2], [2,3], [3,0]] }, // Capella
-            { id: 'per', name: 'Perseus', label: 'The Hero', stars: [{ra: 3.41, dec: 49.86, mag: 1.8}, {ra: 3.14, dec: 40.96, mag: 2.1}], lines: [[0,1]] },
-            { id: 'and', name: 'Andromeda', label: 'Princess', stars: [{ra: 0.14, dec: 29.09, mag: 2.06}, {ra: 1.16, dec: 35.62, mag: 2.0}, {ra: 2.06, dec: 42.3, mag: 2.1}], lines: [[0,1], [1,2]] },
-            { id: 'peg', name: 'Pegasus', label: 'Winged Horse', stars: [{ra: 23.08, dec: 28.08, mag: 2.4}, {ra: 23.06, dec: 15.2, mag: 2.5}, {ra: 0.22, dec: 15.18, mag: 2.8}], lines: [[0,1], [1,2]] }, // Shares star with And
-            { id: 'tri', name: 'Triangulum', label: 'Triangle', stars: [{ra: 1.88, dec: 29.6, mag: 3.4}, {ra: 2.16, dec: 34.98, mag: 3.0}, {ra: 2.29, dec: 33.84, mag: 4.0}], lines: [[0,1], [1,2], [2,0]] },
-            { id: 'oph', name: 'Ophiuchus', label: 'Serpent Bearer', stars: [{ra: 17.58, dec: 12.6, mag: 2.0}, {ra: 16.3, dec: -10, mag: 2.5}, {ra: 17.7, dec: 4, mag: 2.7}], lines: [[0,2], [2,1]] },
-            { id: 'ser', name: 'Serpens', label: 'The Serpent', stars: [{ra: 15.74, dec: 6.4, mag: 2.6}, {ra: 18.9, dec: 4.2, mag: 3.2}], lines: [] }, // Split constellation
-            { id: 'del', name: 'Delphinus', label: 'Dolphin', stars: [{ra: 20.62, dec: 15.9, mag: 3.8}, {ra: 20.65, dec: 14.6, mag: 4.0}, {ra: 20.78, dec: 16.0, mag: 3.6}, {ra: 20.8, dec: 15, mag: 3.9}], lines: [[0,1], [1,2], [2,3], [3,0]] },
-            { id: 'sge', name: 'Sagitta', label: 'Arrow', stars: [{ra: 19.9, dec: 17, mag: 3.5}, {ra: 19.6, dec: 18, mag: 4.3}], lines: [[0,1]] },
-            { id: 'crb', name: 'Corona Borealis', label: 'N. Crown', stars: [{ra: 15.58, dec: 26.9, mag: 2.2}, {ra: 15.8, dec: 26, mag: 4.0}, {ra: 15.3, dec: 27, mag: 3.7}], lines: [[2,0], [0,1]] },
-            { id: 'cvn', name: 'Canes Venatici', label: 'Hunting Dogs', stars: [{ra: 12.93, dec: 38.3, mag: 2.8}, {ra: 12.4, dec: 41, mag: 4.2}], lines: [[0,1]] },
-            { id: 'com', name: 'Coma Berenices', label: 'Berenice\'s Hair', stars: [{ra: 13.1, dec: 17.5, mag: 4.2}, {ra: 13.2, dec: 27, mag: 4.3}], lines: [[0,1]] },
-            { id: 'lac', name: 'Lacerta', label: 'Lizard', stars: [{ra: 22.5, dec: 50, mag: 3.8}], lines: [] },
-            { id: 'vul', name: 'Vulpecula', label: 'Fox', stars: [{ra: 19.5, dec: 24.5, mag: 4.4}], lines: [] },
-            { id: 'lyn', name: 'Lynx', label: 'Lynx', stars: [{ra: 9.3, dec: 34.4, mag: 3.1}], lines: [] },
-            { id: 'lmi', name: 'Leo Minor', label: 'Little Lion', stars: [{ra: 10.9, dec: 34, mag: 3.8}], lines: [] },
-            { id: 'cam', name: 'Camelopardalis', label: 'Giraffe', stars: [{ra: 5, dec: 60, mag: 4.0}], lines: [] },
-            
-            // --- SOUTHERN ---
-            { id: 'ori', name: 'Orion', label: 'The Hunter', stars: [{ra: 5.91, dec: 7.4, mag: 0.42}, {ra: 5.24, dec: -8.2, mag: 0.12}, {ra: 5.41, dec: 6.3, mag: 1.64}, {ra: 5.53, dec: -0.3, mag: 2.23}, {ra: 5.60, dec: -1.2, mag: 1.70}, {ra: 5.67, dec: -1.9, mag: 1.77}, {ra: 5.79, dec: -9.6, mag: 2.06}], lines: [[0,2], [0,5], [2,3], [3,4], [4,5], [5,6], [1,6], [3,1]] },
-            { id: 'cma', name: 'Canis Major', label: 'Big Dog', stars: [{ra: 6.75, dec: -16.7, mag: -1.46}, {ra: 6.97, dec: -28.9, mag: 1.5}, {ra: 7.05, dec: -26.4, mag: 1.8}, {ra: 6.33, dec: -17.9, mag: 1.9}], lines: [[0,3], [0,2], [2,1]] }, // Sirius
-            { id: 'cmi', name: 'Canis Minor', label: 'Little Dog', stars: [{ra: 7.65, dec: 5.2, mag: 0.38}, {ra: 7.45, dec: 8.3, mag: 2.9}], lines: [[0,1]] }, // Procyon
-            { id: 'cru', name: 'Crux', label: 'Southern Cross', stars: [{ra: 12.44, dec: -63.09, mag: 0.77}, {ra: 12.79, dec: -59.68, mag: 1.25}, {ra: 12.51, dec: -57.11, mag: 1.63}, {ra: 12.25, dec: -58.74, mag: 2.79}], lines: [[0,2], [1,3]] },
-            { id: 'cen', name: 'Centaurus', label: 'Centaur', stars: [{ra: 14.66, dec: -60.83, mag: -0.01}, {ra: 14.06, dec: -60.37, mag: 0.6}, {ra: 12.7, dec: -50, mag: 2.2}, {ra: 13.6, dec: -47, mag: 2.3}], lines: [[0,1], [1,2], [2,3]] }, // Alpha/Beta Cen
-            { id: 'car', name: 'Carina', label: 'Keel', stars: [{ra: 6.40, dec: -52.7, mag: -0.72}, {ra: 9.22, dec: -59, mag: 1.7}, {ra: 8.3, dec: -59.5, mag: 1.9}], lines: [[0,1], [1,2]] }, // Canopus
-            { id: 'eri', name: 'Eridanus', label: 'The River', stars: [{ra: 1.63, dec: -57.2, mag: 0.45}, {ra: 2.9, dec: -40, mag: 2.9}, {ra: 5.1, dec: -5, mag: 2.8}], lines: [[0,1], [1,2]] }, // Achernar
-            { id: 'pup', name: 'Puppis', label: 'Poop Deck', stars: [{ra: 8.05, dec: -40, mag: 2.2}, {ra: 7.6, dec: -43, mag: 2.7}], lines: [[0,1]] },
-            { id: 'vel', name: 'Vela', label: 'Sails', stars: [{ra: 8.16, dec: -47.3, mag: 1.7}, {ra: 9.13, dec: -43, mag: 1.9}], lines: [[0,1]] },
-            { id: 'gru', name: 'Grus', label: 'The Crane', stars: [{ra: 22.13, dec: -46.9, mag: 1.7}, {ra: 22.7, dec: -46.8, mag: 2.1}, {ra: 22.8, dec: -41, mag: 3.0}], lines: [[0,1], [0,2]] },
-            { id: 'phe', name: 'Phoenix', label: 'Phoenix', stars: [{ra: 0.43, dec: -42.3, mag: 2.4}, {ra: 1.4, dec: -46, mag: 3.3}], lines: [[0,1]] },
-            { id: 'tuc', name: 'Tucana', label: 'Toucan', stars: [{ra: 22.3, dec: -60, mag: 2.8}], lines: [] },
-            { id: 'pav', name: 'Pavo', label: 'Peacock', stars: [{ra: 20.4, dec: -56.7, mag: 1.9}], lines: [] },
-            { id: 'hyi', name: 'Hydrus', label: 'Male Water Snake', stars: [{ra: 1.9, dec: -61.5, mag: 2.8}], lines: [] },
-            { id: 'hya', name: 'Hydra', label: 'Water Snake', stars: [{ra: 9.46, dec: -8.65, mag: 1.98}, {ra: 8.6, dec: 6, mag: 3.4}, {ra: 13, dec: -23, mag: 3.0}, {ra: 14, dec: -26, mag: 3.0}], lines: [[0,1], [0,2], [2,3]] }, // Longest
-            { id: 'crt', name: 'Crater', label: 'The Cup', stars: [{ra: 11.3, dec: -14.8, mag: 3.5}, {ra: 11.2, dec: -17, mag: 4.0}], lines: [[0,1]] },
-            { id: 'crv', name: 'Corvus', label: 'The Crow', stars: [{ra: 12.5, dec: -16.5, mag: 2.6}, {ra: 12.2, dec: -17.5, mag: 2.9}, {ra: 12.3, dec: -22, mag: 3.0}, {ra: 12.6, dec: -23, mag: 2.6}], lines: [[0,1], [1,2], [2,3], [3,0]] },
-            { id: 'lep', name: 'Lepus', label: 'The Hare', stars: [{ra: 5.55, dec: -17.8, mag: 2.6}, {ra: 5.4, dec: -20.7, mag: 2.8}], lines: [[0,1]] },
-            { id: 'col', name: 'Columba', label: 'The Dove', stars: [{ra: 5.66, dec: -34, mag: 2.6}], lines: [] },
-            { id: 'ara', name: 'Ara', label: 'The Altar', stars: [{ra: 17.5, dec: -49, mag: 2.8}, {ra: 17.4, dec: -55, mag: 2.9}], lines: [[0,1]] },
-            { id: 'lup', name: 'Lupus', label: 'The Wolf', stars: [{ra: 14.7, dec: -47, mag: 2.3}, {ra: 15, dec: -52, mag: 2.7}], lines: [[0,1]] },
-            { id: 'ind', name: 'Indus', label: 'Indian', stars: [{ra: 20.6, dec: -45, mag: 3.1}], lines: [] },
-            { id: 'ant', name: 'Antlia', label: 'Air Pump', stars: [{ra: 10.4, dec: -31, mag: 4.2}], lines: [] },
-            { id: 'aps', name: 'Apus', label: 'Bird of Paradise', stars: [{ra: 14.8, dec: -79, mag: 3.8}], lines: [] },
-            { id: 'cae', name: 'Caelum', label: 'Chisel', stars: [{ra: 4.7, dec: -42, mag: 4.4}], lines: [] },
-            { id: 'cha', name: 'Chamaeleon', label: 'Chameleon', stars: [{ra: 8.3, dec: -76, mag: 4.0}], lines: [] },
-            { id: 'cir', name: 'Circinus', label: 'Compass', stars: [{ra: 14.7, dec: -65, mag: 3.2}], lines: [] },
-            { id: 'dor', name: 'Dorado', label: 'Swordfish', stars: [{ra: 4.5, dec: -55, mag: 3.3}], lines: [] },
-            { id: 'equ', name: 'Equuleus', label: 'Little Horse', stars: [{ra: 21.2, dec: 5, mag: 3.9}], lines: [] },
-            { id: 'for', name: 'Fornax', label: 'Furnace', stars: [{ra: 3.2, dec: -29, mag: 3.8}], lines: [] },
-            { id: 'hor', name: 'Horologium', label: 'Clock', stars: [{ra: 4.2, dec: -42, mag: 3.8}], lines: [] },
-            { id: 'men', name: 'Mensa', label: 'Table Mountain', stars: [{ra: 5.5, dec: -80, mag: 5.0}], lines: [] },
-            { id: 'mic', name: 'Microscopium', label: 'Microscope', stars: [{ra: 21, dec: -32, mag: 4.7}], lines: [] },
-            { id: 'mon', name: 'Monoceros', label: 'Unicorn', stars: [{ra: 6.4, dec: -7, mag: 3.7}, {ra: 6.5, dec: -3, mag: 3.9}], lines: [] },
-            { id: 'mus', name: 'Musca', label: 'Fly', stars: [{ra: 12.6, dec: -69, mag: 2.7}, {ra: 12.8, dec: -71, mag: 3.0}], lines: [[0,1]] },
-            { id: 'nor', name: 'Norma', label: 'Level', stars: [{ra: 16.2, dec: -50, mag: 4.0}], lines: [] },
-            { id: 'oct', name: 'Octans', label: 'Octant', stars: [{ra: 21, dec: -88, mag: 3.7}], lines: [] }, // South celestial pole
-            { id: 'pic', name: 'Pictor', label: 'Easel', stars: [{ra: 6.8, dec: -50, mag: 3.2}], lines: [] },
-            { id: 'psa', name: 'Piscis Austrinus', label: 'S. Fish', stars: [{ra: 22.96, dec: -29.6, mag: 1.16}], lines: [] }, // Fomalhaut
-            { id: 'pyx', name: 'Pyxis', label: 'Compass', stars: [{ra: 9.1, dec: -25, mag: 3.7}], lines: [] },
-            { id: 'ret', name: 'Reticulum', label: 'Net', stars: [{ra: 4.2, dec: -62, mag: 3.3}], lines: [] },
-            { id: 'scl', name: 'Sculptor', label: 'Sculptor', stars: [{ra: 0.9, dec: -32, mag: 4.3}], lines: [] },
-            { id: 'sct', name: 'Scutum', label: 'Shield', stars: [{ra: 18.5, dec: -8, mag: 3.8}], lines: [] },
-            { id: 'sex', name: 'Sextans', label: 'Sextant', stars: [{ra: 10.1, dec: -0.4, mag: 4.5}], lines: [] },
-            { id: 'tel', name: 'Telescopium', label: 'Telescope', stars: [{ra: 18.5, dec: -46, mag: 3.5}], lines: [] },
-            { id: 'tra', name: 'Triangulum Australe', label: 'S. Triangle', stars: [{ra: 16.8, dec: -69, mag: 1.9}, {ra: 16, dec: -63, mag: 2.8}, {ra: 15.3, dec: -68, mag: 2.9}], lines: [[0,1], [1,2], [2,0]] },
-            { id: 'vol', name: 'Volans', label: 'Flying Fish', stars: [{ra: 8, dec: -68, mag: 3.8}, {ra: 7.2, dec: -74, mag: 3.7}], lines: [[0,1]] },
-            { id: 'cra', name: 'Corona Australis', label: 'S. Crown', stars: [{ra: 19.1, dec: -37, mag: 4.1}, {ra: 18.9, dec: -37.8, mag: 4.0}], lines: [[0,1]] },
-            { id: 'cet', name: 'Cetus', label: 'Sea Monster', stars: [{ra: 2.7, dec: 3, mag: 2.5}, {ra: 0.7, dec: -17, mag: 2.0}, {ra: 0.3, dec: -8, mag: 3.5}, {ra: 3.2, dec: 10, mag: 4.0}], lines: [[0,3], [1,2]] }
+            // --- NORTHERN (28) ---
+            { id: 'umi', name: 'Ursa Minor', label: 'Little Dipper', lore: "The Cynosure, the guiding star. 'Straight mine eye hath caught new pleasures whilst the landscape round it measures.'", source: "John Milton, 'L'Allegro' (1631)", s: [[2.53, 89.3, 2.0], [16.7, 82.0, 4.2], [15.8, 77.8, 4.3], [17.5, 71.8, 3.0], [14.8, 74.1, 2.0], [16.2, 75.5, 4.0], [15.4, 72, 4.0]], l: [[0,1], [1,5], [5,2], [2,4], [4,3], [3,6], [6,2]] },
+            { id: 'uma', name: 'Ursa Major', label: 'Big Dipper', lore: "Callisto, transformed into a bear by Hera, now wanders the sky, never permitted to set in the ocean.", source: "Ovid, 'Metamorphoses' (8 AD)", s: [[11.06, 61.8, 1.8], [11.03, 56.4, 2.4], [11.89, 53.7, 2.4], [12.25, 57.0, 3.3], [12.90, 56.0, 1.8], [13.39, 54.9, 2.3], [13.79, 49.3, 1.9], [9.5, 63, 3.0], [9.0, 67, 3.1], [8.5, 60, 3.2], [10.3, 41, 3.0], [11.2, 33, 3.0], [11.8, 37, 3.0]], l: [[0,1], [1,2], [2,3], [3,0], [3,4], [4,5], [5,6], [0,7], [7,8], [7,9], [2,10], [10,11], [11,12]] },
+            { id: 'cas', name: 'Cassiopeia', label: 'The Queen', lore: "The Queen who boasted she was fairer than the Nereids, sentenced to sit upside down on her throne.", source: "Aratus, 'Phaenomena' (270 BC)", s: [[0.67, 56.5, 2.2], [0.15, 59.1, 2.3], [0.93, 60.7, 2.5], [1.43, 60.2, 2.7], [1.90, 63.7, 3.4]], l: [[1,0], [0,2], [2,3], [3,4]] },
+            { id: 'cep', name: 'Cepheus', label: 'The King', lore: "The King of Aethiopia, husband of Cassiopeia and father of Andromeda.", source: "Greek Mythology", s: [[21.31, 62.6, 2.4], [22.49, 58.2, 3.4], [23.65, 77.6, 3.2], [20.75, 70, 3.5], [23.2, 73, 4.0]], l: [[0,1], [1,2], [2,4], [4,3], [3,0]] },
+            { id: 'dra', name: 'Draco', label: 'The Dragon', lore: "The dragon Ladon who guarded the Golden Apples of the Hesperides, slain by Hercules.", source: "Hyginus, 'Astronomica' (1st Century BC)", s: [[17.53, 51.5, 2.2], [19.21, 67.6, 3.0], [14.07, 64.4, 3.6], [17.9, 56, 3.0], [15.4, 61, 3.5], [19.8, 70, 3.2], [20.4, 74, 3.3], [18.0, 78, 4.0], [11.0, 70, 3.8]], l: [[0,3], [3,1], [1,5], [5,6], [6,7], [7,2], [2,4], [2,8]] },
+            { id: 'boo', name: 'Bootes', label: 'The Herdsman', lore: "The Bear Driver, forever chasing the Great Bear around the pole.", source: "Homer, 'Odyssey' (8th Century BC)", s: [[14.26, 19.2, 0.0], [14.53, 38.3, 3.5], [14.7, 27, 2.7], [13.75, 18.4, 2.7], [15.2, 33, 3.0], [14.3, 51, 3.5], [15.0, 40, 3.6]], l: [[0,3], [0,2], [2,4], [4,1], [1,6], [1,5]] },
+            { id: 'cyg', name: 'Cygnus', label: 'The Swan', lore: "The Swan of Leda, or Orpheus transformed. It flies down the Milky Way.", source: "Ovid, 'Metamorphoses' (8 AD)", s: [[20.69, 45.3, 1.25], [20.37, 40.2, 2.2], [19.51, 28.0, 3.0], [19.49, 45.1, 2.8], [20.77, 34.0, 2.4], [21.2, 30, 3.2], [21.7, 28, 3.9], [19.2, 51, 3.8], [19.6, 53, 4.0]], l: [[0,1], [1,2], [3,1], [1,4], [4,5], [5,6], [3,7], [7,8]] },
+            { id: 'lyr', name: 'Lyra', label: 'The Harp', lore: "The lyre of Orpheus, which could charm stones and trees, placed in the sky after his death.", source: "Greek Mythology", s: [[18.62, 38.8, 0.03], [18.83, 33, 3.2], [19.28, 32.7, 3.5], [18.9, 41, 4.0], [19.1, 37, 4.2]], l: [[0,1], [1,2], [2,4], [4,3], [3,0]] },
+            { id: 'aql', name: 'Aquila', label: 'The Eagle', lore: "The bird of Zeus that carries his thunderbolts.", source: "Greek Mythology", s: [[19.85, 8.9, 0.8], [19.76, 10.6, 2.7], [19.92, 6.4, 3.7], [19.1, 15, 3.0], [19.5, 3, 3.2], [20.2, -2, 3.4], [19.0, -5, 4.0]], l: [[1,0], [0,2], [0,3], [0,4], [4,5], [5,6]] },
+            { id: 'her', name: 'Hercules', label: 'The Hero', lore: "The kneeler, crushing the head of the dragon Draco.", source: "Aratus, 'Phaenomena' (270 BC)", s: [[16.5, 21.5, 3.5], [17.25, 24.8, 3.0], [17.25, 14.4, 3.0], [18, 28, 3.9], [16.0, 17, 3.0], [16.3, 46, 3.8], [18.1, 42, 3.0], [15.8, 37, 3.2]], l: [[0,1], [1,3], [2,1], [2,0], [0,4], [1,5], [3,6], [5,7]] },
+            { id: 'aur', name: 'Auriga', label: 'Charioteer', lore: "Erichthonius of Athens, the first to harness four horses to a chariot.", source: "Pseudo-Eratosthenes", s: [[5.27, 46.0, 0.1], [5.99, 45.0, 1.9], [5.0, 30, 2.7], [4.5, 33, 3.0], [5.6, 37, 3.0], [5.0, 43, 3.0]], l: [[0,1], [1,4], [4,2], [2,3], [3,5], [5,0]] },
+            { id: 'per', name: 'Perseus', label: 'The Hero', lore: "The slayer of Medusa, flying on winged sandals and holding the Gorgon's head.", source: "Greek Mythology", s: [[3.41, 49.9, 1.8], [3.14, 41.0, 2.1], [3.9, 47, 3.0], [3.7, 42, 3.8], [2.8, 55, 3.0], [4.1, 48, 4.0], [2.5, 57, 4.0]], l: [[0,1], [1,3], [0,2], [2,5], [0,4], [4,6]] },
+            { id: 'and', name: 'Andromeda', label: 'Princess', lore: "The chained princess, saved from the sea monster Cetus by Perseus.", source: "Ovid, 'Metamorphoses' (8 AD)", s: [[0.14, 29.1, 2.1], [1.16, 35.6, 2.0], [2.06, 42.3, 2.1], [0.6, 30, 4.4], [1.8, 40, 4.0]], l: [[0,1], [1,2], [0,3], [1,4]] },
+            { id: 'peg', name: 'Pegasus', label: 'Winged Horse', lore: "The winged horse born from the blood of Medusa.", source: "Greek Mythology", s: [[23.08, 28.1, 2.4], [23.06, 15.2, 2.5], [0.22, 15.2, 2.8], [22.1, 6, 3.0], [21.7, 10, 3.5], [22.5, 30, 3.0], [21.5, 20, 3.8]], l: [[0,1], [1,2], [2,0], [1,3], [3,4], [0,5], [5,6]] },
+            { id: 'tri', name: 'Triangulum', label: 'Triangle', lore: "Said to represent the island of Sicily or a surveyors' tool.", source: "Hyginus", s: [[1.88, 29.6, 3.4], [2.16, 35.0, 3.0], [2.29, 33.8, 4.0]], l: [[0,1], [1,2], [2,0]] },
+            { id: 'oph', name: 'Ophiuchus', label: 'Serpent Bearer', lore: "Asclepius, the healer who learned the secret of life from a serpent.", source: "Greek Mythology", s: [[17.58, 12.6, 2.0], [16.3, -10, 2.5], [17.7, 4, 2.7], [17.1, -15, 3.0], [16.9, 9, 3.0], [18.0, 9, 3.2], [16.2, -4, 3.8]], l: [[0,4], [4,1], [1,3], [0,5], [5,2], [1,6]] },
+            { id: 'ser', name: 'Serpens', label: 'The Serpent', lore: "The snake held by Ophiuchus. It is the only constellation split into two parts.", source: "Ptolemy, 'Almagest' (2nd Century AD)", s: [[15.74, 6.4, 2.6], [18.9, 4.2, 3.2], [15.5, 15, 3.7], [16.1, 10, 4.0], [18.4, 0, 4.0], [18.0, -2, 4.0]], l: [[2,3], [3,0], [4,1], [4,5]] },
+            { id: 'del', name: 'Delphinus', label: 'Dolphin', lore: "The dolphin who helped Poseidon woo Amphitrite.", source: "Eratosthenes", s: [[20.62, 15.9, 3.8], [20.65, 14.6, 4.0], [20.78, 16.0, 3.6], [20.8, 15, 3.9], [20.3, 11, 4.5]], l: [[0,1], [1,2], [2,3], [3,0], [1,4]] },
+            { id: 'sge', name: 'Sagitta', label: 'Arrow', lore: "The arrow used by Apollo to kill the Cyclopes.", source: "Eratosthenes", s: [[19.9, 17, 3.5], [19.6, 18, 4.3], [19.4, 18, 5.0], [20.0, 16, 5.0]], l: [[2,1], [1,0], [0,3]] },
+            { id: 'crb', name: 'Corona Borealis', label: 'N. Crown', lore: "The crown of Ariadne, thrown into the sky by Dionysus.", source: "Ovid, 'Fasti'", s: [[15.58, 26.9, 2.2], [15.8, 26, 4.0], [15.3, 27, 3.7], [16.1, 26, 4.6], [15.2, 29, 4.0]], l: [[2,0], [0,1], [1,3], [2,4]] },
+            { id: 'cvn', name: 'Canes Venatici', label: 'Hunting Dogs', lore: "The dogs Asterion and Chara, held on a leash by Bootes.", source: "Hevelius (1687)", s: [[12.93, 38.3, 2.8], [12.4, 41, 4.2]], l: [[0,1]] },
+            { id: 'com', name: 'Coma Berenices', label: 'Berenice\'s Hair', lore: "The amber hair of Queen Berenice II of Egypt, offered to Aphrodite.", source: "Callimachus / Catullus (3rd Century BC)", s: [[13.1, 17.5, 4.2], [13.2, 27, 4.3], [12.5, 23, 4.5]], l: [[0,2], [2,1]] },
+            { id: 'lac', name: 'Lacerta', label: 'Lizard', lore: "A modern constellation created to fill a gap in the northern sky.", source: "Hevelius (1687)", s: [[22.5, 50, 3.8], [22.3, 46, 4.0], [22.8, 42, 4.5], [22.4, 39, 4.4]], l: [[0,1], [1,2], [2,3]] },
+            { id: 'vul', name: 'Vulpecula', label: 'Fox', lore: "Originally 'Vulpecula et Anser' (the Fox and the Goose).", source: "Hevelius (1687)", s: [[19.5, 24.5, 4.4], [19.8, 27, 4.8], [20.2, 24, 4.6]], l: [[0,1], [1,2]] },
+            { id: 'lyn', name: 'Lynx', label: 'Lynx', lore: "Named so because one needs the eyes of a lynx to see it.", source: "Hevelius (1687)", s: [[9.3, 34.4, 3.1], [8.0, 43, 3.8], [7.4, 39, 4.0], [6.5, 59, 4.0], [9.2, 36, 4.0]], l: [[0,1], [1,2], [1,3], [0,4]] },
+            { id: 'lmi', name: 'Leo Minor', label: 'Little Lion', lore: "A faint companion to the great Lion.", source: "Hevelius (1687)", s: [[10.9, 34, 3.8], [10.2, 31, 4.5], [10.5, 36, 4.4]], l: [[0,1], [0,2]] },
+            { id: 'cam', name: 'Camelopardalis', label: 'Giraffe', lore: "The 'Camel-Leopard' (Giraffe), representing the animal Rebecca rode to meet Isaac.", source: "Petrus Plancius (1612)", s: [[5.0, 60, 4.0], [4.5, 55, 4.5], [3.5, 60, 4.5], [6.0, 60, 4.5], [12.0, 77, 4.5]], l: [[0,1], [0,2], [0,3], [3,4]] },
+            { id: 'equ', name: 'Equuleus', label: 'Little Horse', lore: "Often seen as Celeris, the brother of Pegasus.", source: "Greek Mythology", s: [[21.2, 5, 3.9], [21.4, 10, 4.5], [21.1, 7, 4.7]], l: [[0,1], [0,2], [2,1]] },
+
+            // --- SOUTHERN (48) ---
+            { id: 'ori', name: 'Orion', label: 'The Hunter', lore: "Begirt with many a blazing star, Stood the great giant Algebar, Orion, hunter of the beast!", source: "Henry Wadsworth Longfellow (1845)", s: [[5.91, 7.4, 0.4], [5.24, -8.2, 0.1], [5.41, 6.3, 1.6], [5.53, -0.3, 2.2], [5.60, -1.2, 1.7], [5.67, -1.9, 1.8], [5.79, -9.6, 2.1], [4.8, 6.5, 3.2], [6.0, 20, 4.0]], l: [[0,2], [0,5], [2,3], [3,4], [4,5], [5,6], [1,6], [3,1], [2,7], [0,8]] },
+            { id: 'cma', name: 'Canis Major', label: 'Big Dog', lore: "The great hunting dog of Orion, containing Sirius, the brightest star in the sky.", source: "Greek Mythology", s: [[6.75, -16.7, -1.5], [6.97, -28.9, 1.5], [7.05, -26.4, 1.8], [6.33, -17.9, 1.9], [6.6, -30, 2.0], [7.2, -23, 2.4]], l: [[0,3], [0,2], [2,1], [1,4], [2,5]] },
+            { id: 'cmi', name: 'Canis Minor', label: 'Little Dog', lore: "The smaller of Orion's hunting dogs.", source: "Greek Mythology", s: [[7.65, 5.2, 0.4], [7.45, 8.3, 2.9]], l: [[0,1]] },
+            { id: 'cru', name: 'Crux', label: 'Southern Cross', lore: "The cross which points the way to the South Celestial Pole.", source: "Navigation History", s: [[12.44, -63.1, 0.8], [12.79, -59.7, 1.3], [12.51, -57.1, 1.6], [12.25, -58.7, 2.8]], l: [[0,2], [1,3]] },
+            { id: 'cen', name: 'Centaurus', label: 'Centaur', lore: "Chiron, the wise centaur and tutor of heroes.", source: "Greek Mythology", s: [[14.66, -60.8, 0.0], [14.06, -60.4, 0.6], [12.7, -50, 2.2], [13.6, -47, 2.3], [14.1, -42, 2.5], [13.8, -33, 2.8], [11.5, -42, 3.0]], l: [[0,1], [1,2], [2,3], [3,4], [4,5], [2,6]] },
+            { id: 'car', name: 'Carina', label: 'Keel', lore: "The keel of the Argo Navis, the ship of Jason and the Argonauts.", source: "Greek Mythology", s: [[6.40, -52.7, -0.7], [9.22, -59, 1.7], [8.3, -59.5, 1.9], [10.2, -61, 2.0], [7.5, -57, 2.2], [9.3, -55, 2.5]], l: [[0,4], [4,2], [2,1], [1,3], [3,5]] },
+            { id: 'eri', name: 'Eridanus', label: 'The River', lore: "The celestial river into which Phaethon fell.", source: "Greek Mythology", s: [[1.63, -57.2, 0.5], [2.9, -40, 2.9], [5.1, -5, 2.8], [4.2, -34, 3.0], [3.3, -9, 3.5], [4.5, -15, 3.5]], l: [[0,3], [3,1], [1,5], [5,4], [4,2]] },
+            { id: 'pup', name: 'Puppis', label: 'Poop Deck', lore: "The stern of the Argo Navis.", source: "Greek Mythology", s: [[8.05, -40, 2.2], [7.6, -43, 2.7], [6.5, -50, 2.8], [7.8, -25, 3.0]], l: [[0,1], [1,2], [0,3]] },
+            { id: 'vel', name: 'Vela', label: 'Sails', lore: "The sails of the Argo Navis.", source: "Greek Mythology", s: [[8.16, -47.3, 1.7], [9.13, -43, 1.9], [10.1, -55, 2.2], [8.7, -52, 2.5]], l: [[0,1], [1,3], [3,2]] },
+            { id: 'gru', name: 'Grus', label: 'The Crane', lore: "One of the 'Southern Birds' defined by Petrus Plancius.", source: "Plancius / Keyser (1598)", s: [[22.13, -46.9, 1.7], [22.7, -46.8, 2.1], [22.8, -41, 3.0], [23.2, -45, 3.5]], l: [[0,1], [0,2], [1,3]] },
+            { id: 'phe', name: 'Phoenix', label: 'Phoenix', lore: "The mythical bird that is reborn from its own ashes.", source: "Bayer (1603)", s: [[0.43, -42.3, 2.4], [1.4, -46, 3.3], [23.9, -42, 3.8], [0.8, -55, 4.0]], l: [[0,1], [0,2], [0,3]] },
+            { id: 'tuc', name: 'Tucana', label: 'Toucan', lore: "An exotic bird of the south.", source: "Plancius (1598)", s: [[22.3, -60, 2.8], [23.8, -65, 4.0], [0.5, -70, 4.2]], l: [[0,1], [1,2]] },
+            { id: 'pav', name: 'Pavo', label: 'Peacock', lore: "The bird sacred to Hera, with eyes on its tail feathers.", source: "Bayer (1603)", s: [[20.4, -56.7, 1.9], [18.7, -65, 3.5], [19.8, -70, 4.0]], l: [[0,1], [1,2]] },
+            { id: 'hyi', name: 'Hydrus', label: 'Male Water Snake', lore: "The lesser water snake of the south.", source: "Bayer (1603)", s: [[1.9, -61.5, 2.8], [0.4, -77, 3.0], [3.2, -78, 3.2]], l: [[0,1], [1,2]] },
+            { id: 'hya', name: 'Hydra', label: 'Water Snake', lore: "The largest constellation, the snake slain by Hercules.", source: "Greek Mythology", s: [[9.46, -8.7, 2.0], [8.6, 6, 3.4], [13.0, -23, 3.0], [14.0, -26, 3.0], [8.8, 6, 4.3], [8.9, 5, 4.4], [10.5, -15, 3.5], [11.5, -28, 3.8]], l: [[1,0], [0,6], [6,7], [7,2], [2,3]] },
+            { id: 'crt', name: 'Crater', label: 'The Cup', lore: "The cup of the god Apollo.", source: "Greek Mythology", s: [[11.3, -14.8, 3.5], [11.2, -17, 4.0], [11.8, -18, 3.8], [11.0, -6, 4.5]], l: [[0,1], [1,2], [2,0], [0,3]] },
+            { id: 'crv', name: 'Corvus', label: 'The Crow', lore: "The bird that brought water to Apollo in the cup (Crater).", source: "Greek Mythology", s: [[12.5, -16.5, 2.6], [12.2, -17.5, 2.9], [12.3, -22, 3.0], [12.6, -23, 2.6]], l: [[0,1], [1,2], [2,3], [3,0]] },
+            { id: 'lep', name: 'Lepus', label: 'The Hare', lore: "A hare chased eternally by Orion's dogs.", source: "Greek Mythology", s: [[5.55, -17.8, 2.6], [5.4, -20.7, 2.8], [5.1, -11, 3.3], [5.8, -14, 3.5], [5.2, -24, 3.5]], l: [[0,1], [0,2], [2,3], [1,4]] },
+            { id: 'col', name: 'Columba', label: 'The Dove', lore: "The dove released by Noah, or the one that flew through the Clashing Rocks.", source: "Plancius (1592)", s: [[5.66, -34, 2.6], [6.0, -32, 3.0], [5.3, -35, 3.8]], l: [[0,1], [0,2]] },
+            { id: 'ara', name: 'Ara', label: 'The Altar', lore: "The altar on which the gods swore allegiance before the Titanomachy.", source: "Greek Mythology", s: [[17.5, -49, 2.8], [17.4, -55, 2.9], [16.9, -53, 3.0], [18.1, -50, 3.5]], l: [[0,1], [1,2], [0,3]] },
+            { id: 'lup', name: 'Lupus', label: 'The Wolf', lore: "A beast about to be sacrificed by the Centaur.", source: "Ptolemy (2nd Century AD)", s: [[14.7, -47, 2.3], [15.0, -52, 2.7], [15.3, -40, 3.0], [14.3, -43, 3.5], [15.6, -36, 3.6]], l: [[0,1], [1,2], [0,3], [2,4]] },
+            { id: 'ind', name: 'Indus', label: 'Indian', lore: "Represents an indigenous person of the Americas or Asia.", source: "Bayer (1603)", s: [[20.6, -45, 3.1], [21.0, -55, 3.8], [22.0, -60, 4.0]], l: [[0,1], [1,2]] },
+            { id: 'ant', name: 'Antlia', label: 'Air Pump', lore: "Commemorates the invention of the air pump by Robert Boyle.", source: "Lacaille (1763)", s: [[10.4, -31, 4.2], [9.5, -30, 4.5], [10.8, -36, 4.5]], l: [[0,1], [0,2]] },
+            { id: 'aps', name: 'Apus', label: 'Bird of Paradise', lore: "The 'footless' bird of paradise.", source: "Bayer (1603)", s: [[14.8, -79, 3.8], [16.0, -75, 4.0], [17.0, -77, 4.0]], l: [[0,1], [1,2]] },
+            { id: 'cae', name: 'Caelum', label: 'Chisel', lore: "The sculptor's chisel.", source: "Lacaille (1763)", s: [[4.7, -42, 4.4], [4.9, -38, 4.5]], l: [[0,1]] },
+            { id: 'cha', name: 'Chamaeleon', label: 'Chameleon', lore: "The color-changing lizard.", source: "Bayer (1603)", s: [[8.3, -76, 4.0], [10.5, -80, 4.2], [12.0, -78, 4.0]], l: [[0,1], [1,2]] },
+            { id: 'cir', name: 'Circinus', label: 'Compass', lore: "The drafting compass.", source: "Lacaille (1763)", s: [[14.7, -65, 3.2], [15.3, -62, 4.0], [14.5, -69, 4.5]], l: [[0,1], [0,2]] },
+            { id: 'dor', name: 'Dorado', label: 'Swordfish', lore: "The Dolphinfish or Goldfish.", source: "Bayer (1603)", s: [[4.5, -55, 3.3], [5.2, -60, 4.0], [6.1, -65, 4.2]], l: [[0,1], [1,2]] },
+            { id: 'for', name: 'Fornax', label: 'Furnace', lore: "The chemical furnace.", source: "Lacaille (1763)", s: [[3.2, -29, 3.8], [2.8, -32, 4.5], [2.5, -28, 5.0]], l: [[0,1], [1,2]] },
+            { id: 'hor', name: 'Horologium', label: 'Clock', lore: "The pendulum clock.", source: "Lacaille (1763)", s: [[4.2, -42, 3.8], [3.5, -45, 4.5], [2.8, -50, 4.8]], l: [[0,1], [1,2]] },
+            { id: 'men', name: 'Mensa', label: 'Table Mountain', lore: "Named after Table Mountain in South Africa.", source: "Lacaille (1763)", s: [[5.5, -80, 5.0], [6.0, -75, 5.2], [4.5, -78, 5.3]], l: [[0,1], [0,2]] },
+            { id: 'mic', name: 'Microscopium', label: 'Microscope', lore: "Commemorating the invention of the microscope.", source: "Lacaille (1763)", s: [[21.0, -32, 4.7], [20.5, -40, 5.0], [21.5, -41, 5.0]], l: [[0,1], [0,2]] },
+            { id: 'mon', name: 'Monoceros', label: 'Unicorn', lore: "The mythical single-horned horse.", source: "Plancius (1612)", s: [[6.4, -7, 3.7], [6.5, -3, 3.9], [7.2, -10, 4.0], [8.1, -5, 4.2]], l: [[0,1], [0,2], [2,3]] },
+            { id: 'mus', name: 'Musca', label: 'Fly', lore: "The southern fly.", source: "Bayer (1603)", s: [[12.6, -69, 2.7], [12.8, -71, 3.0], [13.2, -67, 3.5], [11.8, -70, 3.8]], l: [[0,1], [1,2], [2,3], [1,3]] },
+            { id: 'nor', name: 'Norma', label: 'Level', lore: "The carpenter's level and square.", source: "Lacaille (1763)", s: [[16.2, -50, 4.0], [16.5, -45, 4.5], [15.8, -55, 4.8]], l: [[0,1], [0,2]] },
+            { id: 'oct', name: 'Octans', label: 'Octant', lore: "The navigational instrument.", source: "Lacaille (1763)", s: [[21.0, -88, 3.7], [14.0, -85, 4.2], [19.0, -80, 4.5]], l: [[0,1], [0,2]] }, // South celestial pole
+            { id: 'pic', name: 'Pictor', label: 'Easel', lore: "The painter's easel.", source: "Lacaille (1763)", s: [[6.8, -50, 3.2], [5.5, -55, 4.0], [6.2, -45, 4.2]], l: [[0,1], [0,2]] },
+            { id: 'psa', name: 'Piscis Austrinus', label: 'S. Fish', lore: "The fish drinking the water poured by Aquarius.", source: "Greek Mythology", s: [[22.96, -29.6, 1.1], [22.5, -32, 4.0], [22.2, -30, 4.2], [21.8, -30, 4.5]], l: [[0,1], [1,2], [2,3]] }, // Fomalhaut
+            { id: 'pyx', name: 'Pyxis', label: 'Compass', lore: "The mariner's compass of the Argo.", source: "Lacaille (1763)", s: [[9.1, -25, 3.7], [8.7, -27, 4.0], [9.3, -30, 4.5]], l: [[0,1], [0,2]] },
+            { id: 'ret', name: 'Reticulum', label: 'Net', lore: "The reticle of a telescope.", source: "Lacaille (1763)", s: [[4.2, -62, 3.3], [3.8, -65, 4.0], [4.5, -60, 4.4], [3.5, -60, 4.5]], l: [[0,1], [1,2], [2,3], [3,0]] },
+            { id: 'scl', name: 'Sculptor', label: 'Sculptor', lore: "The sculptor's studio.", source: "Lacaille (1763)", s: [[0.9, -32, 4.3], [23.9, -30, 4.5], [0.2, -35, 4.5], [23.5, -37, 4.5]], l: [[0,1], [0,2], [2,3]] },
+            { id: 'sct', name: 'Scutum', label: 'Shield', lore: "The shield of King Sobieski of Poland.", source: "Hevelius (1684)", s: [[18.5, -8, 3.8], [18.7, -10, 4.2], [18.4, -13, 4.5], [18.9, -5, 4.5]], l: [[0,1], [1,2], [0,3]] },
+            { id: 'sex', name: 'Sextans', label: 'Sextant', lore: "The astronomical sextant.", source: "Hevelius (1687)", s: [[10.1, -0.4, 4.5], [10.5, 3, 5.0], [9.8, -5, 5.0]], l: [[0,1], [0,2]] },
+            { id: 'tel', name: 'Telescopium', label: 'Telescope', lore: "The aerial telescope.", source: "Lacaille (1763)", s: [[18.5, -46, 3.5], [19.0, -50, 4.0], [18.2, -52, 4.5]], l: [[0,1], [0,2]] },
+            { id: 'tra', name: 'Triangulum Australe', label: 'S. Triangle', lore: "A navigational triangle in the south.", source: "Bayer (1603)", s: [[16.8, -69, 1.9], [16.0, -63, 2.8], [15.3, -68, 2.9]], l: [[0,1], [1,2], [2,0]] },
+            { id: 'vol', name: 'Volans', label: 'Flying Fish', lore: "The fish that flies above the water.", source: "Bayer (1603)", s: [[8.0, -68, 3.8], [7.2, -74, 3.7], [9.0, -70, 4.0], [7.5, -65, 4.2]], l: [[0,1], [1,2], [2,3], [3,0]] },
+            { id: 'cra', name: 'Corona Australis', label: 'S. Crown', lore: "A wreath of laurel.", source: "Greek Mythology", s: [[19.1, -37, 4.1], [18.9, -37.8, 4.0], [18.5, -38, 4.5], [19.3, -39, 4.5]], l: [[0,1], [1,2], [1,3]] },
+            { id: 'cet', name: 'Cetus', label: 'Sea Monster', lore: "The monster sent by Poseidon to devour Andromeda.", source: "Greek Mythology", s: [[2.7, 3, 2.5], [0.7, -17, 2.0], [0.3, -8, 3.5], [3.2, 10, 4.0], [1.8, -10, 3.5], [2.2, -12, 4.0], [0.5, -20, 3.8]], l: [[0,3], [1,2], [1,6], [2,4], [4,5]] }
         ];
 
         // --- APP STATE ---
@@ -442,7 +471,7 @@
             lstRotation = -radians; // Earth rotates East, so Sky rotates West (negative)
             updateSkyRotation();
             
-            document.getElementById('sensor-status').innerText = "GPS LOCKED";
+            document.getElementById('sensor-status').innerText = "GPS ACTIVE";
         }
 
         function updateSkyRotation() {
@@ -453,7 +482,7 @@
 
         function addBackgroundStars() {
             const geometry = new THREE.BufferGeometry();
-            const count = 2000;
+            const count = 2500;
             const positions = new Float32Array(count * 3);
             for (let i = 0; i < count; i++) {
                 const r = starSphereRadius * 1.2;
@@ -472,38 +501,67 @@
         function buildConstellations() {
             CONSTELLATIONS.forEach(constellation => {
                 const group = new THREE.Group();
-                group.userData = { isConstellation: true, id: constellation.id, name: constellation.name, label: constellation.label };
+                group.userData = { 
+                    isConstellation: true, 
+                    id: constellation.id, 
+                    name: constellation.name, 
+                    label: constellation.label,
+                    lore: constellation.lore,
+                    source: constellation.source
+                };
                 
                 const starPositions = [];
-                constellation.stars.forEach(star => {
-                    const pos = sphericalToCartesian(star.ra, star.dec, starSphereRadius);
-                    starPositions.push(pos);
-                    const sGeo = new THREE.SphereGeometry(Math.max(0.5, 3 - star.mag), 8, 8);
-                    const sMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-                    const sMesh = new THREE.Mesh(sGeo, sMat);
-                    sMesh.position.copy(pos);
-                    group.add(sMesh);
-                });
-
-                const lineMat = new THREE.LineBasicMaterial({ color: 0x00ffff, opacity: 0.4, transparent: true });
-                if (constellation.lines && constellation.lines.length > 0) {
-                    constellation.lines.forEach(pair => {
-                        const lineGeo = new THREE.BufferGeometry().setFromPoints([starPositions[pair[0]], starPositions[pair[1]]]);
-                        const line = new THREE.Line(lineGeo, lineMat);
-                        group.add(line);
+                
+                // Process compact star data s: [RA, Dec, Mag]
+                if(constellation.s) {
+                    constellation.s.forEach(starData => {
+                        const ra = starData[0];
+                        const dec = starData[1];
+                        const mag = starData[2];
+                        
+                        const pos = sphericalToCartesian(ra, dec, starSphereRadius);
+                        starPositions.push(pos);
+                        
+                        // Scale star size by magnitude (smaller mag = brighter = bigger)
+                        const size = Math.max(0.5, 3.5 - mag); 
+                        
+                        const sGeo = new THREE.SphereGeometry(size, 8, 8);
+                        const sMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+                        const sMesh = new THREE.Mesh(sGeo, sMat);
+                        sMesh.position.copy(pos);
+                        group.add(sMesh);
                     });
                 }
 
-                // Raycast target
-                const boundingGeo = new THREE.SphereGeometry(40, 8, 8);
+                // Process compact line data l: [idx1, idx2]
+                const lineMat = new THREE.LineBasicMaterial({ color: 0x00ffff, opacity: 0.4, transparent: true });
+                if (constellation.l && constellation.l.length > 0) {
+                    constellation.l.forEach(pair => {
+                        const start = starPositions[pair[0]];
+                        const end = starPositions[pair[1]];
+                        if(start && end) {
+                            const lineGeo = new THREE.BufferGeometry().setFromPoints([start, end]);
+                            const line = new THREE.Line(lineGeo, lineMat);
+                            group.add(line);
+                        }
+                    });
+                }
+
+                // Raycast target (Bounding Sphere)
+                const boundingGeo = new THREE.SphereGeometry(30, 8, 8);
                 const boundingMat = new THREE.MeshBasicMaterial({ visible: false });
                 const boundMesh = new THREE.Mesh(boundingGeo, boundingMat);
                 let center = new THREE.Vector3();
-                starPositions.forEach(p => center.add(p));
-                center.divideScalar(starPositions.length);
-                boundMesh.position.copy(center);
-                boundMesh.userData = { parentConstellation: constellation };
-                group.add(boundMesh);
+                if(starPositions.length > 0) {
+                    starPositions.forEach(p => center.add(p));
+                    center.divideScalar(starPositions.length);
+                    boundMesh.position.copy(center);
+                    boundMesh.userData = { parentConstellation: constellation };
+                    // Add userData to the mesh as well for raycasting
+                    boundMesh.userData.lore = constellation.lore;
+                    boundMesh.userData.source = constellation.source;
+                    group.add(boundMesh);
+                }
 
                 celestialGroup.add(group);
             });
@@ -539,15 +597,20 @@
                     .then(response => {
                         if (response === 'granted') {
                             window.addEventListener('deviceorientation', handleOrientation);
-                            isSensorActive = true;
+                            // Do NOT set isSensorActive = true here blindly.
+                            // Let the event handler confirm we are receiving data.
                         } else {
                             alert("Orientation permission denied.");
                         }
                     })
-                    .catch(e => console.error(e));
+                    .catch(e => {
+                        console.error(e);
+                        alert("Error requesting sensor permission: " + e.message);
+                    });
             } else {
+                // Non-iOS devices
                 window.addEventListener('deviceorientation', handleOrientation);
-                isSensorActive = true;
+                // Same here, wait for data
             }
 
             // 2. Geolocation (For Time/Sky alignment)
@@ -568,6 +631,9 @@
 
         function handleOrientation(event) {
             if (!event.alpha && !event.webkitCompassHeading) return;
+
+            // If we receive valid data, THEN we activate sensor mode
+            isSensorActive = true; 
 
             const degtorad = Math.PI / 180;
             
@@ -663,6 +729,26 @@
             if (found) {
                 document.getElementById('target-name').innerText = found.name;
                 document.getElementById('target-sub').innerText = found.label;
+                
+                // NEW: Update Lore and Source
+                const loreEl = document.getElementById('target-lore');
+                const sourceEl = document.getElementById('target-source');
+                
+                // Check if lore exists in the found object
+                if (found.lore) {
+                    loreEl.innerText = `"${found.lore}"`;
+                    loreEl.style.display = 'block';
+                } else {
+                    loreEl.style.display = 'none';
+                }
+
+                if (found.source) {
+                    sourceEl.innerText = found.source;
+                    sourceEl.style.display = 'block';
+                } else {
+                    sourceEl.style.display = 'none';
+                }
+
                 infoBox.style.opacity = 1;
             } else {
                 infoBox.style.opacity = 0;
