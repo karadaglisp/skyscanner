@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Gemini Sky Scanner</title>
+    <title>Gemini Sky Scanner Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&display=swap');
@@ -53,6 +53,7 @@
             padding: 20px;
             text-align: center;
             background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+            pointer-events: auto; /* Allow interaction with slider */
         }
 
         .status-pill {
@@ -117,41 +118,24 @@
             box-shadow: 0 0 10px #0ff;
         }
 
-        .compass-strip {
-            width: 100%;
-            height: 40px;
-            overflow: hidden;
-            position: relative;
-            border-top: 1px solid rgba(255,255,255,0.2);
-            margin-top: auto;
+        /* Calibration Controls */
+        .calibration-area {
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
         
-        .compass-ticks {
-            display: flex;
-            width: 200%; 
-            justify-content: space-around;
-            position: absolute;
-            bottom: 0;
-            left: -50%;
-            transition: transform 0.1s linear;
+        input[type=range] {
+            width: 80%;
+            accent-color: #0ff;
         }
-
-        .tick {
-            width: 1px;
-            height: 10px;
-            background: rgba(255,255,255,0.5);
-            position: relative;
-        }
-        .tick.major {
-            height: 20px;
-            background: #fff;
-        }
-        .tick.major span {
-            position: absolute;
-            top: -20px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 12px;
+        
+        .calib-label {
+            font-size: 10px;
+            color: #aaa;
+            margin-bottom: 5px;
+            text-transform: uppercase;
         }
 
         /* Start Button */
@@ -161,7 +145,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.9);
+            background: rgba(0,0,0,0.95);
             z-index: 100;
             display: flex;
             flex-direction: column;
@@ -201,7 +185,7 @@
         /* Error Log Area */
         #debug-log {
             position: absolute;
-            bottom: 60px;
+            bottom: 120px; /* moved up to avoid slider */
             left: 10px;
             right: 10px;
             color: #ff5555;
@@ -209,6 +193,7 @@
             pointer-events: none;
             text-align: center;
             z-index: 20;
+            text-shadow: 0 0 2px black;
         }
     </style>
 </head>
@@ -218,11 +203,11 @@
     <div id="start-overlay">
         <h1 style="color:white; font-size: 40px; margin-bottom: 10px;">SKY SCANNER</h1>
         <p class="instructions">
-            Point your device at the sky to identify constellations.<br>
-            On mobile, this requires access to your orientation sensors.<br>
-            On desktop, click and drag to look around.
+            We need your <strong>Location</strong> and <strong>Sensors</strong> to align the stars correctly.<br>
+            1. Tap the button below.<br>
+            2. Allow permissions when asked.
         </p>
-        <button id="start-btn" class="glow-btn">Initialize Sensors</button>
+        <button id="start-btn" class="glow-btn">Start Scanning</button>
         <div id="debug-log"></div>
     </div>
 
@@ -232,7 +217,7 @@
     <!-- UI Overlay -->
     <div id="hud">
         <div class="hud-header">
-            <div class="status-pill" id="coords">RA: 00h | DEC: 00°</div>
+            <div class="status-pill" id="coords">DEC: 00°</div>
             <div class="status-pill" id="sensor-status">Waiting</div>
         </div>
         
@@ -244,11 +229,9 @@
         </div>
 
         <div class="hud-footer">
-            <div class="compass-strip">
-                <div class="compass-ticks" id="compass-ticks">
-                    <!-- Generated via JS -->
-                </div>
-                <div style="position:absolute; bottom:0; left:50%; width:2px; height:30px; background:#f00; transform:translateX(-50%); z-index:5;"></div>
+            <div class="calibration-area">
+                <span class="calib-label">Manual Sky Calibration (Drag if stars are misaligned)</span>
+                <input type="range" id="calib-slider" min="0" max="360" value="0">
             </div>
         </div>
     </div>
@@ -256,8 +239,7 @@
     <script>
         /**
          * ASTRONOMY DATA
-         * Simplified star database for major constellations.
-         * RA is in decimal hours (0-24), Dec is in degrees (-90 to 90).
+         * RA: 0-24h, Dec: -90 to +90
          */
         const CONSTELLATIONS = [
             {
@@ -271,7 +253,7 @@
                     { name: 'Alnitak', ra: 5.67, dec: -1.9, mag: 1.77 },
                     { name: 'Saiph', ra: 5.79, dec: -9.6, mag: 2.06 }
                 ],
-                lines: [[0,2], [0,5], [2,3], [3,4], [4,5], [5,6], [1,6], [3,1]] // Indices of stars array
+                lines: [[0,2], [0,5], [2,3], [3,4], [4,5], [5,6], [1,6], [3,1]]
             },
             {
                 id: 'ursamajor', name: 'Ursa Major', label: 'The Big Dipper',
@@ -306,7 +288,7 @@
                     { name: 'Sargas', ra: 17.62, dec: -42.99, mag: 1.8 },
                     { name: 'Shaula', ra: 17.56, dec: -37.10, mag: 1.6 }
                 ],
-                lines: [[2,1], [1,0], [0,4], [4,3]] // Simplified shape
+                lines: [[2,1], [1,0], [0,4], [4,3]]
             },
             {
                 id: 'cyg', name: 'Cygnus', label: 'The Swan',
@@ -332,31 +314,36 @@
         ];
 
         // --- APP STATE ---
-        let scene, camera, renderer;
+        let scene, camera, renderer, celestialGroup;
         let starSphereRadius = 500;
         let isSensorActive = false;
-        let orientation = { alpha: 0, beta: 90, gamma: 0 }; // Initial looking forward
         let manualControl = { isDragging: false, lon: 0, lat: 0, lastX: 0, lastY: 0 };
+        let calibrationOffset = 0; // Manual rotation offset
+        let lstRotation = 0; // Local Sidereal Time rotation
         
-        // --- LOGGING ---
         function logMsg(msg) {
             const el = document.getElementById('debug-log');
             if(el) el.innerHTML = msg;
             console.log(msg);
         }
 
-        // --- THREE.JS SETUP ---
         function init() {
             const container = document.getElementById('canvas-container');
             
             // Scene
             scene = new THREE.Scene();
-            // Add faint background stars (noise)
+
+            // Create a group to hold the entire sky so we can rotate it based on time
+            celestialGroup = new THREE.Group();
+            scene.add(celestialGroup);
+
+            // Add stars to the GROUP, not the SCENE
             addBackgroundStars();
+            buildConstellations();
 
             // Camera
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 0, 0); // Inside the sphere
+            camera.position.set(0, 0, 0); 
 
             // Renderer
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -364,36 +351,29 @@
             renderer.setPixelRatio(window.devicePixelRatio);
             container.appendChild(renderer.domElement);
 
-            // Build Constellations
-            buildConstellations();
-
-            // Event Listeners
+            // Inputs
             window.addEventListener('resize', onWindowResize, false);
             setupInputHandlers();
             
-            // Animation Loop
             animate();
-            
-            // Generate Compass Strip
-            generateCompass();
         }
 
-        // --- ASTRONOMY MATH ---
-        function sphericalToCartesian(raHours, decDeg, radius) {
-            // Convert RA (0-24h) to radians (0 - 2PI)
-            // In Three.js, we usually map: Y is UP (North celestial pole). 
-            // X/Z plane is the celestial equator.
-            // RA increases Eastward.
-            
-            const phi = (90 - decDeg) * (Math.PI / 180); // Polar angle (from North Pole down)
-            const theta = (raHours / 24) * 2 * Math.PI;   // Azimuthal angle
+        // --- ASTRONOMY & TIME LOGIC ---
 
-            // Standard spherical conversion (swapping axis to match standard 3D world: Y is Up)
+        function sphericalToCartesian(raHours, decDeg, radius) {
+            // Mapping RA/Dec to 3D Sphere
+            // RA 0h = 0 rad, RA 24h = 2PI rad
+            // Dec +90 = North Pole (+Y in Threejs)
+            
+            const phi = (90 - decDeg) * (Math.PI / 180); 
+            // We shift theta by PI because standard RA 0 usually aligns with +X or +Z depending on convention.
+            // In our system, we'll calibrate LST to match.
+            const theta = (raHours / 24) * 2 * Math.PI; 
+
             // x = r * sin(phi) * cos(theta)
             // z = r * sin(phi) * sin(theta)
             // y = r * cos(phi)
             
-            // We flip X to match looking "out" vs "in" logic often needed for skyboxes
             const x = radius * Math.sin(phi) * Math.cos(theta);
             const z = radius * Math.sin(phi) * Math.sin(theta);
             const y = radius * Math.cos(phi);
@@ -401,82 +381,111 @@
             return new THREE.Vector3(x, y, z);
         }
 
+        function calculateLST(longitude) {
+            const now = new Date();
+            // Calculate Greenwich Sidereal Time (GST)
+            // Simplified approximation formula
+            const jd = (now.getTime() / 86400000) + 2440587.5;
+            const d = jd - 2451545.0;
+            let gmst = 18.697374558 + 24.06570982441908 * d;
+            gmst %= 24;
+            if (gmst < 0) gmst += 24;
+
+            // Local Sidereal Time = GST + Longitude (hours)
+            let lst = gmst + (longitude / 15.0);
+            lst %= 24;
+            if (lst < 0) lst += 24;
+            
+            return lst;
+        }
+
+        function alignSky(latitude, longitude) {
+            const lst = calculateLST(longitude);
+            logMsg(`GPS Locked. Lat: ${latitude.toFixed(1)}, Lon: ${longitude.toFixed(1)}, LST: ${lst.toFixed(1)}h`);
+
+            // Rotate the entire celestial sphere
+            // Earth rotates 15 deg/hour.
+            // If LST is 0h, RA 0h is on the meridian.
+            // In 3D, we rotate around Y axis.
+            
+            // This is an approximation. We rotate the sky -LST.
+            // We convert hours to radians: (lst / 24) * 2PI
+            // There might be a phase shift needed (Math.PI or similar) depending on our XYZ setup.
+            // We use the slider to fine tune, but this gets us close.
+            
+            const radians = (lst / 24) * Math.PI * 2;
+            lstRotation = -radians; // Earth rotates East, so Sky rotates West (negative)
+            updateSkyRotation();
+            
+            document.getElementById('sensor-status').innerText = "GPS LOCKED";
+        }
+
+        function updateSkyRotation() {
+            // Combine LST rotation + Manual Calibration
+            const manualRad = (calibrationOffset / 360) * Math.PI * 2;
+            celestialGroup.rotation.y = lstRotation + manualRad;
+        }
+
         function addBackgroundStars() {
             const geometry = new THREE.BufferGeometry();
-            const count = 1500;
+            const count = 2000;
             const positions = new Float32Array(count * 3);
-            
             for (let i = 0; i < count; i++) {
-                // Random point on sphere
-                const r = starSphereRadius * 1.2; // Further out
+                const r = starSphereRadius * 1.2;
                 const theta = Math.random() * 2 * Math.PI;
                 const phi = Math.acos(2 * Math.random() - 1);
-                
                 positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
                 positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
                 positions[i * 3 + 2] = r * Math.cos(phi);
             }
-            
             geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
             const material = new THREE.PointsMaterial({ color: 0x555555, size: 1.5, sizeAttenuation: false });
             const points = new THREE.Points(geometry, material);
-            scene.add(points);
+            celestialGroup.add(points);
         }
 
         function buildConstellations() {
             CONSTELLATIONS.forEach(constellation => {
-                const constellationGroup = new THREE.Group();
-                constellationGroup.userData = { isConstellation: true, id: constellation.id, name: constellation.name, label: constellation.label };
+                const group = new THREE.Group();
+                group.userData = { isConstellation: true, id: constellation.id, name: constellation.name, label: constellation.label };
                 
-                // 1. Create Stars
                 const starPositions = [];
-
                 constellation.stars.forEach(star => {
                     const pos = sphericalToCartesian(star.ra, star.dec, starSphereRadius);
                     starPositions.push(pos);
-                    
-                    // Add visible star mesh
                     const sGeo = new THREE.SphereGeometry(Math.max(0.5, 3 - star.mag), 8, 8);
                     const sMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
                     const sMesh = new THREE.Mesh(sGeo, sMat);
                     sMesh.position.copy(pos);
-                    constellationGroup.add(sMesh);
+                    group.add(sMesh);
                 });
 
-                // 2. Draw Lines
                 const lineMat = new THREE.LineBasicMaterial({ color: 0x00ffff, opacity: 0.4, transparent: true });
                 constellation.lines.forEach(pair => {
-                    const lineGeo = new THREE.BufferGeometry().setFromPoints([
-                        starPositions[pair[0]],
-                        starPositions[pair[1]]
-                    ]);
+                    const lineGeo = new THREE.BufferGeometry().setFromPoints([starPositions[pair[0]], starPositions[pair[1]]]);
                     const line = new THREE.Line(lineGeo, lineMat);
-                    constellationGroup.add(line);
+                    group.add(line);
                 });
 
-                // Add bounding sphere for simple raycasting/targeting detection
-                const boundingGeo = new THREE.SphereGeometry(30, 8, 8); 
+                // Raycast target
+                const boundingGeo = new THREE.SphereGeometry(40, 8, 8);
                 const boundingMat = new THREE.MeshBasicMaterial({ visible: false });
                 const boundMesh = new THREE.Mesh(boundingGeo, boundingMat);
-                // Calculate centroid approx
                 let center = new THREE.Vector3();
                 starPositions.forEach(p => center.add(p));
                 center.divideScalar(starPositions.length);
                 boundMesh.position.copy(center);
-                boundMesh.userData = { parentConstellation: constellation }; // Ref back
-                
-                constellationGroup.add(boundMesh);
+                boundMesh.userData = { parentConstellation: constellation };
+                group.add(boundMesh);
 
-                scene.add(constellationGroup);
+                celestialGroup.add(group);
             });
         }
 
-        // --- CONTROLS & SENSORS ---
+        // --- CONTROLS ---
 
         function setupInputHandlers() {
             const el = document.body;
-
-            // Touch/Mouse Drag (Fallback)
             el.addEventListener('mousedown', onPointerDown);
             el.addEventListener('touchstart', onPointerDown);
             window.addEventListener('mouseup', onPointerUp);
@@ -484,189 +493,139 @@
             window.addEventListener('mousemove', onPointerMove);
             window.addEventListener('touchmove', onPointerMove);
 
-            // Start Button
             document.getElementById('start-btn').addEventListener('click', () => {
-                logMsg("Requesting sensor permissions...");
-                requestDeviceOrientation();
+                logMsg("Requesting all permissions...");
+                requestSensors();
+            });
+
+            // Calibration Slider
+            document.getElementById('calib-slider').addEventListener('input', (e) => {
+                calibrationOffset = parseInt(e.target.value);
+                updateSkyRotation();
             });
         }
 
-        function requestDeviceOrientation() {
-            // Check for iOS 13+ permission requirement
+        function requestSensors() {
+            // 1. Orientation
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
                 DeviceOrientationEvent.requestPermission()
                     .then(response => {
                         if (response === 'granted') {
-                            logMsg("Permission granted!");
                             window.addEventListener('deviceorientation', handleOrientation);
                             isSensorActive = true;
-                            document.getElementById('sensor-status').innerText = "SENSORS ACTIVE";
-                            document.getElementById('start-overlay').style.display = 'none';
                         } else {
-                            logMsg("Permission denied by user.");
-                            alert("Permission denied. Ensure you are on HTTPS and allowed motion sensors.");
-                            document.getElementById('sensor-status').innerText = "DENIED";
+                            alert("Orientation permission denied.");
                         }
                     })
-                    .catch(err => {
-                        logMsg("Error: " + err.message);
-                        console.error(err);
-                        alert("Error: " + err.message + "\nAre you using HTTPS?");
-                    });
-            } else if ('ondeviceorientation' in window) {
-                // Non-iOS or older devices
-                logMsg("Standard device orientation detected.");
+                    .catch(e => console.error(e));
+            } else {
                 window.addEventListener('deviceorientation', handleOrientation);
                 isSensorActive = true;
-                document.getElementById('sensor-status').innerText = "SENSORS ACTIVE";
-                document.getElementById('start-overlay').style.display = 'none';
+            }
+
+            // 2. Geolocation (For Time/Sky alignment)
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition((position) => {
+                    alignSky(position.coords.latitude, position.coords.longitude);
+                    document.getElementById('start-overlay').style.display = 'none';
+                }, (err) => {
+                    logMsg("GPS Denied. Sky will be unaligned.");
+                    alert("GPS denied. You must use the slider to align stars manually.");
+                    document.getElementById('start-overlay').style.display = 'none';
+                });
             } else {
-                logMsg("DeviceOrientation not supported on this device.");
-                alert("Your device does not support orientation sensors.");
+                logMsg("No GPS support.");
+                document.getElementById('start-overlay').style.display = 'none';
             }
         }
 
         function handleOrientation(event) {
-            // Check if we are actually getting data (sometimes listeners fire with nulls on desktops)
-            if (event.alpha === null) {
-                logMsg("Sensor active but returning null data (Desktop?)");
-                return;
-            }
+            if (!event.alpha && !event.webkitCompassHeading) return;
 
-            // Simple stabilization
             const degtorad = Math.PI / 180;
             
-            // Create quaternion from device orientation
-            // Order: Z, X, Y
+            // Device Orientation logic
             const q = new THREE.Quaternion();
-            const alpha = event.alpha ? degtorad * event.alpha : 0; // Z
-            const beta = event.beta ? degtorad * event.beta : 0; // X'
-            const gamma = event.gamma ? degtorad * event.gamma : 0; // Y''
             
-            const orient = window.orientation ? degtorad * window.orientation : 0; // Screen orientation
+            // iOS vs Android Compass handling
+            let alpha = event.alpha ? degtorad * event.alpha : 0;
+            let beta = event.beta ? degtorad * event.beta : 0;
+            let gamma = event.gamma ? degtorad * event.gamma : 0;
+            const orient = window.orientation ? degtorad * window.orientation : 0;
 
-            // Apply standard Euler conversion for device orientation
+            if (event.webkitCompassHeading) {
+                // iOS uses webkitCompassHeading for 'North' relative to magnetic north
+                // This is much more accurate for AR
+                alpha = degtorad * -event.webkitCompassHeading;
+                // iOS correction:
+                // We typically need to adjust rotation order or sign when mixing with ThreeJS
+                // For simplicity in this demo, we rely on standard Euler but substitute alpha
+            }
+
             const zee = new THREE.Vector3(0, 0, 1);
             const euler = new THREE.Euler();
             const q0 = new THREE.Quaternion();
-            const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // - PI/2 around X
+            const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); 
 
-            euler.set(beta, alpha, -gamma, 'YXZ'); // 'ZXY' for the device, but mapped to Three.js
-            q.setFromEuler(euler); // orient the device
-            q.multiply(q1); // camera looks out the back of the device, not the top
-            q.multiply(q0.setFromAxisAngle(zee, -orient)); // adjust for screen orientation
+            // Standard mapping
+            euler.set(beta, alpha, -gamma, 'YXZ');
+            q.setFromEuler(euler);
+            q.multiply(q1); 
+            q.multiply(q0.setFromAxisAngle(zee, -orient));
 
-            camera.quaternion.slerp(q, 0.5); // Smooth interpolation
-            updateHUD(alpha);
+            camera.quaternion.slerp(q, 0.5); 
         }
 
-        // --- TOUCH/MOUSE LOGIC ---
+        // --- FALLBACK CONTROLS ---
         function onPointerDown(event) {
+            if(event.target.id === 'calib-slider') return; // Don't drag camera if using slider
             manualControl.isDragging = true;
             manualControl.lastX = event.clientX || event.touches[0].clientX;
             manualControl.lastY = event.clientY || event.touches[0].clientY;
         }
 
-        function onPointerUp() {
-            manualControl.isDragging = false;
-        }
+        function onPointerUp() { manualControl.isDragging = false; }
 
         function onPointerMove(event) {
             if (!manualControl.isDragging || isSensorActive) return;
-
             const x = event.clientX || event.touches[0].clientX;
             const y = event.clientY || event.touches[0].clientY;
-
             const deltaX = x - manualControl.lastX;
             const deltaY = y - manualControl.lastY;
-
             manualControl.lon -= deltaX * 0.2;
             manualControl.lat += deltaY * 0.2;
             manualControl.lat = Math.max(-85, Math.min(85, manualControl.lat));
+            manualControl.lastX = x; manualControl.lastY = y;
 
-            manualControl.lastX = x;
-            manualControl.lastY = y;
-
-            // Apply to camera
             const phi = THREE.Math.degToRad(90 - manualControl.lat);
             const theta = THREE.Math.degToRad(manualControl.lon);
-
             const target = new THREE.Vector3();
             target.x = 500 * Math.sin(phi) * Math.cos(theta);
             target.y = 500 * Math.cos(phi);
             target.z = 500 * Math.sin(phi) * Math.sin(theta);
-            
             camera.lookAt(target);
-            updateHUD(manualControl.lon);
         }
 
-        // --- HUD & COMPASS ---
-        function generateCompass() {
-            const container = document.getElementById('compass-ticks');
-            let html = '';
-            for(let i=0; i<=360; i+=10) {
-                let label = '';
-                if(i === 0 || i === 360) label = 'N';
-                else if(i === 90) label = 'E';
-                else if(i === 180) label = 'S';
-                else if(i === 270) label = 'W';
-                else label = i;
-                
-                let cls = label.length > 0 && isNaN(label) ? 'major' : 'tick';
-                if(!isNaN(label) && label !== '') cls += ' minor'; 
-                
-                // Only show numbers for non-cardinals if major enough? No, simple ticks
-                if(!isNaN(label)) label = ''; // Hide numbers to keep it clean, show only cardinals
-
-                html += `<div class="${cls}"><span>${label}</span></div>`;
-            }
-            container.innerHTML = html;
-        }
-
-        function updateHUD(headingRadOrDeg) {
-            // Heading logic for compass strip
-            // Heading is roughly user's alpha or lon
-            
-            // Very rough approximation for visual effect
-            let deg = 0;
-            if(isSensorActive) {
-                // Alpha is 0-360
-                 // Converting quaternion to Euler Y for heading is complex, 
-                 // we will rely on the raw alpha passed or derived from camera lookAt
-                 const vector = new THREE.Vector3(0, 0, -1);
-                 vector.applyQuaternion(camera.quaternion);
-                 const angle = Math.atan2(vector.x, vector.z);
-                 deg = Math.round(angle * (180/Math.PI));
-                 if(deg < 0) deg += 360;
-            } else {
-                 deg = Math.abs(manualControl.lon % 360);
-            }
-
-            // Move compass strip
-            // 360 degrees = 100% of the strip container approx? 
-            // We implement an infinite scroll logic visually
-            const ticks = document.getElementById('compass-ticks');
-            const percent = (deg / 360) * 50; // because ticks is 200% width
-            ticks.style.transform = `translateX(-${percent}%)`;
-
-            // Identify Target
-            identifyConstellation();
-        }
-
+        // --- RAYCASTING ---
         const raycaster = new THREE.Raycaster();
-        const center = new THREE.Vector2(0, 0); // Center of screen
+        const center = new THREE.Vector2(0, 0);
 
         function identifyConstellation() {
             raycaster.setFromCamera(center, camera);
+            // Intersect against the celestialGroup children (which contains constellation groups)
+            // We need to traverse: celestialGroup -> constellationGroup -> boundingSphere
             
-            // Check intersections with constellation groups
-            // We check the "invisible bounding spheres" we added earlier
-            const intersects = raycaster.intersectObjects(scene.children, true);
+            // Get all children of celestialGroup (constellation groups)
+            const constellations = celestialGroup.children.filter(c => c.type === 'Group');
             
+            // Flatten children for intersection
+            let targets = [];
+            constellations.forEach(c => targets.push(...c.children));
+            
+            const intersects = raycaster.intersectObjects(targets);
             let found = null;
             
             for (let i = 0; i < intersects.length; i++) {
-                // Look for our specific bounding mesh userdata
                 if (intersects[i].object.userData && intersects[i].object.userData.parentConstellation) {
                     found = intersects[i].object.userData.parentConstellation;
                     break;
@@ -681,12 +640,11 @@
             } else {
                 infoBox.style.opacity = 0;
             }
-
-            // Update Coords text
+            
+            // Display rough DEC
             const vector = new THREE.Vector3(0, 0, -1);
             vector.applyQuaternion(camera.quaternion);
-            const dec = 90 - (Math.acos(vector.y) * 180 / Math.PI); // rough Dec
-            const ra = (Math.atan2(vector.x, vector.z) * 180 / Math.PI) / 15; // rough RA
+            const dec = 90 - (Math.acos(vector.y) * 180 / Math.PI);
             document.getElementById('coords').innerText = `DEC: ${dec.toFixed(0)}°`;
         }
 
@@ -698,12 +656,11 @@
 
         function animate() {
             requestAnimationFrame(animate);
+            identifyConstellation();
             renderer.render(scene, camera);
         }
 
-        // Boot
         init();
-
     </script>
 </body>
 </html>
