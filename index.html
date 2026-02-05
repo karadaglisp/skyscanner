@@ -201,7 +201,7 @@
     <!-- HUD -->
     <div id="hud-layer">
         <div class="hud-top">
-            <div id="gps-status" class="hud-status">GPS: SEARCHING...</div>
+            <div id="gps-status" class="hud-status">GPS: INITIALIZING...</div>
             <div id="lst-time" class="hud-status">LST: 00:00</div>
         </div>
         
@@ -225,10 +225,10 @@
         <h1>STARFINDER</h1>
         <p style="text-align:center; max-width: 80%;">
             Augmented Reality Sky Scanner.<br>
-            Please allow GPS and Device Orientation.
+            Tap below to launch.
         </p>
-        <button id="start-btn" class="btn">INITIALIZE SYSTEMS</button>
-        <div id="permission-log" class="loading">Waiting for user input...</div>
+        <button id="start-btn" class="btn">LAUNCH SYSTEM</button>
+        <div id="permission-log" class="loading"></div>
     </div>
 
     <!-- Application Logic -->
@@ -243,8 +243,6 @@
         const CONSTELLATION_COLOR = 0x00ffff;
         
         // --- DATA: CONSTELLATIONS ---
-        // RA in Hours (0-24), Dec in Degrees (-90 to 90)
-        // Structure: Name, Description, Lines (pairs of star indices), Stars (coords)
         const DATABASE = [
             {
                 id: 'orion',
@@ -294,11 +292,11 @@
 
         // --- APP STATE ---
         let scene, camera, renderer, controls;
-        let starContainer; // Holds all stars to rotate them together
+        let starContainer; 
         let raycaster;
-        let constellationHitSpheres = []; // Invisible spheres for collision detection
+        let constellationHitSpheres = []; 
         
-        let userLat = 0;
+        let userLat = 51.5; // Default (London)
         let userLon = 0;
         let gpsLocked = false;
         let deviceControlActive = false;
@@ -306,60 +304,45 @@
 
         // --- INITIALIZATION ---
         function init() {
-            // Scene Setup
             const container = document.getElementById('canvas-container');
+            
+            // Cleanup if re-init
+            if(renderer) {
+                container.removeChild(renderer.domElement);
+            }
+
             scene = new THREE.Scene();
-            // Background color is handled by CSS, but fog helps depth
             scene.fog = new THREE.FogExp2(0x000000, 0.001);
 
-            // Camera
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            // Initial look direction (North)
             camera.position.set(0, 0, 0.1); 
 
-            // Renderer
             renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
             container.appendChild(renderer.domElement);
 
-            // Objects Group
             starContainer = new THREE.Group();
             scene.add(starContainer);
 
-            // Tools
             raycaster = new THREE.Raycaster();
 
-            // Populate Sky
             createProceduralStars();
             createConstellations();
 
-            // Events
             window.addEventListener('resize', onWindowResize);
         }
 
         // --- ASTRONOMY MATH ---
-
-        // Convert RA (hours), Dec (degrees) to Cartesian (x,y,z) on unit sphere
         function raDecToVector(ra, dec, radius) {
-            // RA: 0h = 0deg, 24h = 360deg. 
-            // In ThreeJS (Y-up), we map Celestial Sphere:
-            // Y axis = Celestial North Pole (Dec = 90)
-            // X/Z plane = Celestial Equator (Dec = 0)
-            
-            const phi = (90 - dec) * (Math.PI / 180); // Polar angle (from up axis)
-            const theta = (ra / 24) * 2 * Math.PI; // Azimuthal angle (RA) - standard math usually uses right-hand rule
-            
-            // Note: We negate theta or swap sin/cos depending on coordinate system chirality. 
-            // Here we use standard spherical conversion.
+            const phi = (90 - dec) * (Math.PI / 180); 
+            const theta = (ra / 24) * 2 * Math.PI; 
             const x = radius * Math.sin(phi) * Math.cos(theta);
-            const y = radius * Math.cos(phi); // Y is UP (North)
+            const y = radius * Math.cos(phi); 
             const z = radius * Math.sin(phi) * Math.sin(theta);
-            
             return new THREE.Vector3(x, y, z);
         }
 
-        // Generate a soft glow texture programmatically
         function createStarTexture() {
             const canvas = document.createElement('canvas');
             canvas.width = 32;
@@ -376,115 +359,68 @@
         }
 
         // --- OBJECT CREATION ---
-
         function createProceduralStars() {
             const geometry = new THREE.BufferGeometry();
             const positions = [];
-            
             for (let i = 0; i < STAR_COUNT; i++) {
-                // Random spherical distribution
                 const r = SPHERE_RADIUS;
                 const theta = 2 * Math.PI * Math.random();
                 const phi = Math.acos(2 * Math.random() - 1);
-                
                 const x = r * Math.sin(phi) * Math.cos(theta);
                 const y = r * Math.sin(phi) * Math.sin(theta);
                 const z = r * Math.cos(phi);
-
                 positions.push(x, y, z);
             }
-
             geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-            
-            const material = new THREE.PointsMaterial({ 
-                color: 0x888888, 
-                size: 2, 
-                sizeAttenuation: false 
-            });
-
-            const points = new THREE.Points(geometry, material);
-            starContainer.add(points);
+            const material = new THREE.PointsMaterial({ color: 0x888888, size: 2, sizeAttenuation: false });
+            starContainer.add(new THREE.Points(geometry, material));
         }
 
         function createConstellations() {
             const starTexture = createStarTexture();
-            const material = new THREE.PointsMaterial({ 
-                color: 0xffffff, 
-                size: 15, 
-                map: starTexture, 
-                transparent: true,
-                depthWrite: false
-            });
-
-            const lineMaterial = new THREE.LineBasicMaterial({
-                color: CONSTELLATION_COLOR,
-                transparent: true,
-                opacity: 0.4,
-                linewidth: 2
-            });
+            const material = new THREE.PointsMaterial({ color: 0xffffff, size: 15, map: starTexture, transparent: true, depthWrite: false });
+            const lineMaterial = new THREE.LineBasicMaterial({ color: CONSTELLATION_COLOR, transparent: true, opacity: 0.4, linewidth: 2 });
 
             DATABASE.forEach(constellation => {
                 const starPositions = [];
-                const geometry = new THREE.BufferGeometry();
-                const vertices = []; // For lines
-
-                // 1. Create Stars
+                const vertices = [];
                 constellation.stars.forEach(star => {
                     const pos = raDecToVector(star.ra, star.dec, SPHERE_RADIUS);
                     starPositions.push(pos.x, pos.y, pos.z);
                 });
-                
                 const starGeo = new THREE.BufferGeometry();
                 starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
-                const starPoints = new THREE.Points(starGeo, material);
-                starContainer.add(starPoints);
+                starContainer.add(new THREE.Points(starGeo, material));
 
-                // 2. Create Lines
                 constellation.connections.forEach(pair => {
-                    const idx1 = pair[0];
-                    const idx2 = pair[1];
-                    const v1 = new THREE.Vector3(starPositions[idx1*3], starPositions[idx1*3+1], starPositions[idx1*3+2]);
-                    const v2 = new THREE.Vector3(starPositions[idx2*3], starPositions[idx2*3+1], starPositions[idx2*3+2]);
-                    vertices.push(v1.x, v1.y, v1.z);
-                    vertices.push(v2.x, v2.y, v2.z);
+                    const idx1 = pair[0], idx2 = pair[1];
+                    vertices.push(starPositions[idx1*3], starPositions[idx1*3+1], starPositions[idx1*3+2]);
+                    vertices.push(starPositions[idx2*3], starPositions[idx2*3+1], starPositions[idx2*3+2]);
                 });
+                const lineGeo = new THREE.BufferGeometry();
+                lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+                starContainer.add(new THREE.LineSegments(lineGeo, lineMaterial));
 
-                geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-                const lines = new THREE.LineSegments(geometry, lineMaterial);
-                starContainer.add(lines);
-
-                // 3. Create Interaction Hit Sphere (Invisible center point)
-                // Calculate average position (center of constellation)
-                let cx=0, cy=0, cz=0;
-                let count = constellation.stars.length;
-                for(let i=0; i<starPositions.length; i+=3) {
-                    cx += starPositions[i];
-                    cy += starPositions[i+1];
-                    cz += starPositions[i+2];
-                }
+                // Hit Sphere
+                let cx=0, cy=0, cz=0, count = constellation.stars.length;
+                for(let i=0; i<starPositions.length; i+=3) { cx += starPositions[i]; cy += starPositions[i+1]; cz += starPositions[i+2]; }
                 const center = new THREE.Vector3(cx/count, cy/count, cz/count);
-                
-                // Add invisible sphere for raycasting
-                const hitGeo = new THREE.SphereGeometry(40, 8, 8);
-                const hitMat = new THREE.MeshBasicMaterial({ visible: false, wireframe: true });
-                const hitMesh = new THREE.Mesh(hitGeo, hitMat);
+                const hitMesh = new THREE.Mesh(
+                    new THREE.SphereGeometry(40, 8, 8),
+                    new THREE.MeshBasicMaterial({ visible: false })
+                );
                 hitMesh.position.copy(center);
-                hitMesh.userData = { id: constellation.id, name: constellation.name, desc: constellation.desc };
-                
+                hitMesh.userData = { ...constellation };
                 starContainer.add(hitMesh);
                 constellationHitSpheres.push(hitMesh);
             });
         }
 
-        // --- ALIGNMENT LOGIC ---
-
+        // --- ALIGNMENT & LOOP ---
         function getGreenwichSiderealTime() {
             const now = new Date();
-            // Julian Date
             const julian = (now.getTime() / 86400000) + 2440587.5;
-            const D = julian - 2451545.0; // Days since J2000
-            
-            // GMST formula
+            const D = julian - 2451545.0;
             let gmst = 18.697374558 + 24.06570982441908 * D;
             gmst = gmst % 24;
             if (gmst < 0) gmst += 24;
@@ -492,56 +428,27 @@
         }
 
         function updateSkyAlignment() {
-            if (!gpsLocked) return;
-
+            // Even if no GPS, we align based on default (London) or previous known loc
             const gmst = getGreenwichSiderealTime();
-            // LST = GMST + Longitude (in hours)
-            // Longitude is degrees, convert to hours (deg / 15)
             const lonHours = userLon / 15;
             let lst = gmst + lonHours;
             if (lst < 0) lst += 24;
             if (lst > 24) lst -= 24;
 
-            // Update HUD
+            // HUD
             const h = Math.floor(lst);
             const m = Math.floor((lst - h) * 60);
-            const timeStr = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
             const el = document.getElementById('lst-time');
-            if(el) el.innerText = `LST: ${timeStr}`;
+            if(el) el.innerText = `LST: ${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
 
-            // ROTATE THE SKY CONTAINER
-            // 1. Reset rotation
+            // Rotation
             starContainer.rotation.set(0, 0, 0);
-
-            // 2. Adjust for Latitude (Tilt the Pole)
-            // At Lat 90 (North Pole), Celestial Pole is at Zenith (Y).
-            // At Lat 0 (Equator), Celestial Pole is at Horizon (Z).
-            // ThreeJS Y is UP. 
-            // We need to rotate around X axis.
-            // If Lat = 90, no rotation. If Lat = 0, rotate -90 deg (-PI/2).
             const latRad = userLat * (Math.PI / 180);
             const latCorrection = (Math.PI / 2) - latRad;
-            starContainer.rotateX(latCorrection);
-
-            // 3. Adjust for LST (Earth's Rotation)
-            // This rotates the sky around the Celestial Pole (now tilted).
-            // LST corresponds to the RA currently at the Meridian.
-            // Rotate around local Y (after tilt) or global Y? 
-            // The stars are defined by RA/Dec. 
-            // We need to rotate the sphere around its own "North" axis.
-            // Since we applied X rotation to the container, the container's Y axis is now the Pole.
-            // We rotate around that axis.
-            // Rotation amount = LST converted to radians.
-            // Stars move East to West. Earth spins West to East.
-            // We need to rotate the sky: -LST * 15deg
-            const lstRad = lst * (Math.PI / 12); // (lst / 24) * 2PI
-            starContainer.rotateY(-lstRad);
-            
-            // Note: Detailed alignment involves transforming coordinate spaces more rigorously,
-            // but for a fun AR visualizer, tilting for Lat and spinning for LST is the core logic.
+            starContainer.rotateX(latCorrection); // Tilt for latitude
+            const lstRad = lst * (Math.PI / 12);
+            starContainer.rotateY(-lstRad); // Spin for time
         }
-
-        // --- INTERACTION & LOOP ---
 
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
@@ -550,22 +457,13 @@
         }
 
         function checkInteractions() {
-            // Raycast from center of screen
             raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-
-            // Check against constellation hit spheres
             const intersects = raycaster.intersectObjects(constellationHitSpheres);
-
             const panel = document.getElementById('info-panel');
-            
             if (intersects.length > 0) {
                 const data = intersects[0].object.userData;
-                const nameEl = document.getElementById('target-name');
-                const descEl = document.getElementById('target-desc');
-                
-                if(nameEl) nameEl.innerText = data.name;
-                if(descEl) descEl.innerText = data.desc;
-                
+                document.getElementById('target-name').innerText = data.name;
+                document.getElementById('target-desc').innerText = data.desc;
                 panel.classList.add('active');
             } else {
                 panel.classList.remove('active');
@@ -574,127 +472,88 @@
 
         function animate() {
             animationFrameId = requestAnimationFrame(animate);
-
             if (controls) controls.update();
-            
-            // Keep alignment updated (time passes)
-            if(gpsLocked) updateSkyAlignment();
-
+            updateSkyAlignment(); // Always update time rotation
             checkInteractions();
             renderer.render(scene, camera);
         }
 
-        // --- PERMISSIONS & STARTUP ---
-
-        const btn = document.getElementById('start-btn');
-        const overlay = document.getElementById('start-overlay');
-        const log = document.getElementById('permission-log');
-        const gpsStatus = document.getElementById('gps-status');
-
-        function startGame() {
-             // Initial alignment immediately
-             updateSkyAlignment();
-             // Hide overlay
-             overlay.style.display = 'none';
-             // Stop any existing loop just in case
-             if (animationFrameId) cancelAnimationFrame(animationFrameId);
-             animate();
+        // --- CONTROLS SETUP ---
+        function setupDesktopControls() {
+            if (controls) controls.dispose();
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableZoom = false;
+            controls.enablePan = false;
+            controls.rotateSpeed = -0.5;
+            deviceControlActive = false;
         }
 
-        btn.addEventListener('click', async () => {
-            btn.disabled = true;
-            btn.style.opacity = "0.5";
-            log.innerText = "Requesting System Access...";
-            
-            // 1. Initialize Three.js
-            // Guard against multiple clicks re-initializing
-            if (!scene) {
-                try {
-                    init();
-                } catch(e) {
-                    console.error("Init failed", e);
-                    log.innerText = "Graphics Error. Refresh.";
-                    return;
-                }
-            }
+        function setupMobileControls() {
+            if (controls) controls.dispose();
+            controls = new DeviceOrientationControls(camera);
+            controls.alphaOffset = 0;
+            deviceControlActive = true;
+        }
 
-            // 2. Request DeviceOrientation (iOS 13+ requirement)
-            try {
-                if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                    log.innerText = "Requesting Sensor Permission...";
+        function updateGpsStatus(msg, color) {
+            const el = document.getElementById('gps-status');
+            if(el) { el.innerText = msg; el.style.color = color; }
+        }
+
+        // --- LAUNCH LOGIC (ROBUST) ---
+        const btn = document.getElementById('start-btn');
+        const overlay = document.getElementById('start-overlay');
+
+        btn.addEventListener('click', async () => {
+            // 1. VISUAL START: UNBLOCK USER IMMEDIATELY
+            overlay.style.display = 'none';
+            if (!scene) init();
+            setupDesktopControls(); // Start with fallback manual controls
+            animate();
+
+            // 2. ATTEMPT PERMISSIONS (Progressive Enhancement)
+            
+            // A. Device Orientation (iOS 13+ requires this to be inside the click handler)
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    // We await this briefly, but the app is already running visually
                     const permission = await DeviceOrientationEvent.requestPermission();
                     if (permission === 'granted') {
-                        log.innerText = "Sensors: OK. Waiting for GPS...";
                         setupMobileControls();
-                    } else {
-                        log.innerText = "Sensors: Denied. Using touch controls.";
-                        setupDesktopControls();
                     }
-                } else {
-                    // Non-iOS 13+ devices or Desktop
-                    log.innerText = "Sensors: Auto/Desktop.";
-                    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-                         setupMobileControls();
-                    } else {
-                         setupDesktopControls();
-                    }
+                } catch (e) {
+                    console.log("Sensors: Manual mode enabled.");
                 }
-            } catch (e) {
-                console.error(e);
-                log.innerText = "Sensor Error. Using manual controls.";
-                setupDesktopControls();
+            } else {
+                // Non-iOS: Check if we are likely mobile to auto-switch
+                if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+                    setupMobileControls();
+                }
             }
 
-            // 3. Request GPS with Timeout
-            // This is the critical fix for "Stuck" screens
+            // B. GPS Location (Async)
             if ("geolocation" in navigator) {
-                log.innerText = "Requesting GPS (5s timeout)...";
-                
-                // Add a timeout option so it doesn't wait forever
-                const geoOptions = { timeout: 5000, enableHighAccuracy: false, maximumAge: 0 };
+                updateGpsStatus("GPS: LOCATING...", "white");
+                const geoOptions = { timeout: 6000, enableHighAccuracy: false }; // 6s timeout
                 
                 navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        userLat = position.coords.latitude;
-                        userLon = position.coords.longitude;
+                    (pos) => {
+                        userLat = pos.coords.latitude;
+                        userLon = pos.coords.longitude;
                         gpsLocked = true;
-                        gpsStatus.innerText = `GPS: LOCKED [${userLat.toFixed(2)}, ${userLon.toFixed(2)}]`;
-                        gpsStatus.style.color = '#00ff00';
-                        startGame();
+                        updateGpsStatus(`GPS: LOCKED [${userLat.toFixed(1)}, ${userLon.toFixed(1)}]`, '#00ff00');
                     },
-                    (error) => {
-                        console.warn("GPS Fail/Deny", error);
-                        gpsStatus.innerText = "GPS: OFF (DEFAULTING)";
-                        gpsStatus.style.color = 'orange';
-                        // Default to Londonish
-                        userLat = 51.5;
-                        userLon = 0;
-                        gpsLocked = true; 
-                        startGame();
+                    (err) => {
+                        console.warn(err);
+                        updateGpsStatus("GPS: N/A (DEFAULTING)", "orange");
+                        // Keep default lat/lon
                     },
                     geoOptions
                 );
             } else {
-                log.innerText = "GPS Not supported.";
-                // Short delay so user can read message
-                setTimeout(() => startGame(), 1000);
+                updateGpsStatus("GPS: UNSUPPORTED", "orange");
             }
         });
-
-        function setupMobileControls() {
-            deviceControlActive = true;
-            controls = new DeviceOrientationControls(camera);
-            controls.alphaOffset = 0; // Compass alignment adjustment if needed
-        }
-
-        function setupDesktopControls() {
-            deviceControlActive = false;
-            controls = new OrbitControls(camera, renderer.domElement);
-            controls.enableZoom = false;
-            controls.enablePan = false;
-            controls.rotateSpeed = -0.5; // Invert for "looking around" feel
-        }
-
     </script>
 </body>
 </html>
