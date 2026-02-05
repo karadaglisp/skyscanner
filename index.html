@@ -302,6 +302,7 @@
         let userLon = 0;
         let gpsLocked = false;
         let deviceControlActive = false;
+        let animationFrameId;
 
         // --- INITIALIZATION ---
         function init() {
@@ -504,7 +505,9 @@
             // Update HUD
             const h = Math.floor(lst);
             const m = Math.floor((lst - h) * 60);
-            document.getElementById('lst-time').innerText = `LST: ${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
+            const timeStr = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
+            const el = document.getElementById('lst-time');
+            if(el) el.innerText = `LST: ${timeStr}`;
 
             // ROTATE THE SKY CONTAINER
             // 1. Reset rotation
@@ -557,8 +560,12 @@
             
             if (intersects.length > 0) {
                 const data = intersects[0].object.userData;
-                document.getElementById('target-name').innerText = data.name;
-                document.getElementById('target-desc').innerText = data.desc;
+                const nameEl = document.getElementById('target-name');
+                const descEl = document.getElementById('target-desc');
+                
+                if(nameEl) nameEl.innerText = data.name;
+                if(descEl) descEl.innerText = data.desc;
+                
                 panel.classList.add('active');
             } else {
                 panel.classList.remove('active');
@@ -566,7 +573,7 @@
         }
 
         function animate() {
-            requestAnimationFrame(animate);
+            animationFrameId = requestAnimationFrame(animate);
 
             if (controls) controls.update();
             
@@ -584,15 +591,37 @@
         const log = document.getElementById('permission-log');
         const gpsStatus = document.getElementById('gps-status');
 
+        function startGame() {
+             // Initial alignment immediately
+             updateSkyAlignment();
+             // Hide overlay
+             overlay.style.display = 'none';
+             // Stop any existing loop just in case
+             if (animationFrameId) cancelAnimationFrame(animationFrameId);
+             animate();
+        }
+
         btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            btn.style.opacity = "0.5";
             log.innerText = "Requesting System Access...";
             
             // 1. Initialize Three.js
-            init();
+            // Guard against multiple clicks re-initializing
+            if (!scene) {
+                try {
+                    init();
+                } catch(e) {
+                    console.error("Init failed", e);
+                    log.innerText = "Graphics Error. Refresh.";
+                    return;
+                }
+            }
 
             // 2. Request DeviceOrientation (iOS 13+ requirement)
             try {
                 if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    log.innerText = "Requesting Sensor Permission...";
                     const permission = await DeviceOrientationEvent.requestPermission();
                     if (permission === 'granted') {
                         log.innerText = "Sensors: OK. Waiting for GPS...";
@@ -616,8 +645,14 @@
                 setupDesktopControls();
             }
 
-            // 3. Request GPS
+            // 3. Request GPS with Timeout
+            // This is the critical fix for "Stuck" screens
             if ("geolocation" in navigator) {
+                log.innerText = "Requesting GPS (5s timeout)...";
+                
+                // Add a timeout option so it doesn't wait forever
+                const geoOptions = { timeout: 5000, enableHighAccuracy: false, maximumAge: 0 };
+                
                 navigator.geolocation.getCurrentPosition(
                     (position) => {
                         userLat = position.coords.latitude;
@@ -625,30 +660,24 @@
                         gpsLocked = true;
                         gpsStatus.innerText = `GPS: LOCKED [${userLat.toFixed(2)}, ${userLon.toFixed(2)}]`;
                         gpsStatus.style.color = '#00ff00';
-                        
-                        // Initial alignment immediately
-                        updateSkyAlignment();
-                        
-                        // Hide overlay
-                        overlay.style.display = 'none';
-                        animate();
+                        startGame();
                     },
                     (error) => {
-                        console.warn("GPS Denied", error);
+                        console.warn("GPS Fail/Deny", error);
                         gpsStatus.innerText = "GPS: OFF (DEFAULTING)";
                         gpsStatus.style.color = 'orange';
                         // Default to Londonish
                         userLat = 51.5;
                         userLon = 0;
-                        gpsLocked = true; // Pretend we are locked to enable rotation logic
-                        
-                        overlay.style.display = 'none';
-                        animate();
-                    }
+                        gpsLocked = true; 
+                        startGame();
+                    },
+                    geoOptions
                 );
             } else {
                 log.innerText = "GPS Not supported.";
-                setTimeout(() => { overlay.style.display = 'none'; animate(); }, 1000);
+                // Short delay so user can read message
+                setTimeout(() => startGame(), 1000);
             }
         });
 
