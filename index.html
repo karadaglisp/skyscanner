@@ -3,135 +3,80 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Gemini Sky Scanner Pro</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <title>StarFinder AR</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&display=swap');
+        :root {
+            --hud-color: #00ffff;
+            --hud-bg: rgba(0, 20, 30, 0.85);
+            --alert-color: #ff3333;
+        }
 
-        body, html {
+        body {
             margin: 0;
-            padding: 0;
             overflow: hidden;
             background-color: #000;
-            font-family: 'Rajdhani', sans-serif;
-            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            color: var(--hud-color);
             user-select: none;
             -webkit-user-select: none;
         }
 
         #canvas-container {
-            width: 100vw;
-            height: 100vh;
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 1;
-        }
-
-        /* HUD Overlay */
-        #hud {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: 10;
-            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* HUD LAYOUT */
+        #hud-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none; /* Let clicks pass through to canvas if needed */
             display: flex;
             flex-direction: column;
             justify-content: space-between;
         }
 
-        .hud-header {
-            padding: 20px;
+        .hud-top {
             display: flex;
             justify-content: space-between;
+            padding: 20px;
             background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
         }
 
-        .hud-footer {
-            padding: 20px;
-            text-align: center;
-            background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
-            pointer-events: auto; /* Allow interaction with slider */
-        }
-
-        .status-pill {
-            background: rgba(0, 255, 255, 0.1);
-            border: 1px solid rgba(0, 255, 255, 0.4);
-            color: #0ff;
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 14px;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-            backdrop-filter: blur(4px);
-        }
-
-        #target-info {
-            position: absolute;
-            top: 45%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-            text-shadow: 0 0 10px rgba(0,0,0,0.8);
-            transition: opacity 0.3s;
-            width: 80%;
-            max-width: 500px;
-            pointer-events: none;
-        }
-
-        #target-name {
-            font-size: 42px;
-            font-weight: 700;
-            color: #fff;
-            text-shadow: 0 0 15px #0ff;
-            margin: 0;
-            line-height: 1;
-        }
-
-        #target-sub {
-            font-size: 16px;
-            color: #0ff;
-            margin-top: 5px;
+        .hud-status {
+            font-size: 12px;
             text-transform: uppercase;
             letter-spacing: 2px;
-            margin-bottom: 15px;
+            text-shadow: 0 0 5px var(--hud-color);
         }
 
-        #target-lore {
-            font-size: 18px;
-            color: rgba(255, 255, 255, 0.9);
-            font-style: italic;
-            font-weight: 500;
-            margin-bottom: 8px;
-            line-height: 1.4;
-            background: rgba(0, 0, 0, 0.4);
-            padding: 10px;
-            border-radius: 8px;
-            backdrop-filter: blur(2px);
-        }
-
-        #target-source {
-            font-size: 12px;
-            color: rgba(255, 255, 255, 0.6);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        /* Reticle */
-        .reticle {
+        .hud-center {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* CROSSHAIR */
+        .reticle {
             width: 60px;
             height: 60px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(0, 255, 255, 0.3);
             border-radius: 50%;
-            pointer-events: none;
+            position: relative;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.1);
         }
-        
         .reticle::after {
             content: '';
             position: absolute;
@@ -139,627 +84,461 @@
             left: 50%;
             width: 4px;
             height: 4px;
-            background: #0ff;
+            background: var(--hud-color);
             transform: translate(-50%, -50%);
             border-radius: 50%;
-            box-shadow: 0 0 10px #0ff;
         }
+        .reticle-corner {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border-color: var(--hud-color);
+            border-style: solid;
+        }
+        .tl { top: -5px; left: -5px; border-width: 2px 0 0 2px; }
+        .tr { top: -5px; right: -5px; border-width: 2px 2px 0 0; }
+        .bl { bottom: -5px; left: -5px; border-width: 0 0 2px 2px; }
+        .br { bottom: -5px; right: -5px; border-width: 0 2px 2px 0; }
 
-        /* Calibration Controls */
-        .calibration-area {
-            margin-top: 10px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        
-        input[type=range] {
+        /* INFO PANEL */
+        #info-panel {
+            position: absolute;
+            bottom: 15%;
+            left: 50%;
+            transform: translateX(-50%);
             width: 80%;
-            accent-color: #0ff;
+            max-width: 400px;
+            background: var(--hud-bg);
+            border: 1px solid var(--hud-color);
+            padding: 15px;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            border-radius: 4px;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
         }
-        
-        .calib-label {
-            font-size: 10px;
-            color: #aaa;
-            margin-bottom: 5px;
+        #info-panel.active {
+            opacity: 1;
+        }
+        #target-name {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin: 0 0 5px 0;
             text-transform: uppercase;
         }
+        #target-desc {
+            font-size: 0.9em;
+            opacity: 0.8;
+            margin: 0;
+        }
 
-        /* Start Button */
+        /* START OVERLAY */
         #start-overlay {
-            position: fixed;
+            position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.95);
-            z-index: 100;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 10;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            pointer-events: auto;
         }
 
-        button.glow-btn {
+        h1 {
+            font-size: 2.5em;
+            letter-spacing: 5px;
+            margin-bottom: 10px;
+            color: white;
+            text-shadow: 0 0 10px var(--hud-color);
+        }
+
+        .btn {
             background: transparent;
-            color: #0ff;
-            border: 2px solid #0ff;
+            color: var(--hud-color);
+            border: 2px solid var(--hud-color);
             padding: 15px 40px;
-            font-family: 'Rajdhani', sans-serif;
-            font-size: 24px;
-            font-weight: 700;
-            text-transform: uppercase;
+            font-family: inherit;
+            font-size: 1.2em;
             cursor: pointer;
-            box-shadow: 0 0 15px rgba(0, 255, 255, 0.2);
-            transition: all 0.3s ease;
             margin-top: 20px;
-        }
-
-        button.glow-btn:hover {
-            background: rgba(0, 255, 255, 0.1);
-            box-shadow: 0 0 30px rgba(0, 255, 255, 0.6);
+            transition: all 0.3s;
+            text-transform: uppercase;
             letter-spacing: 2px;
         }
 
-        .instructions {
-            max-width: 80%;
-            text-align: center;
-            color: #ccc;
-            margin-bottom: 20px;
-            line-height: 1.6;
+        .btn:hover {
+            background: var(--hud-color);
+            color: black;
+            box-shadow: 0 0 20px var(--hud-color);
         }
 
-        /* Error Log Area */
-        #debug-log {
-            position: absolute;
-            bottom: 120px; /* moved up to avoid slider */
-            left: 10px;
-            right: 10px;
-            color: #ff5555;
-            font-size: 12px;
-            pointer-events: none;
-            text-align: center;
-            z-index: 20;
-            text-shadow: 0 0 2px black;
+        .loading {
+            margin-top: 20px;
+            font-size: 0.8em;
+            color: #888;
         }
+
     </style>
+    
+    <!-- Import Map for Three.js and Controls -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
 </head>
 <body>
 
-    <div id="debug-log"></div>
-
-    <!-- Start/Permission Screen -->
-    <div id="start-overlay">
-        <h1 style="color:white; font-size: 40px; margin-bottom: 10px;">SKY SCANNER</h1>
-        <p class="instructions">
-            We need your <strong>Location</strong> and <strong>Sensors</strong> to align the stars correctly.<br>
-            1. Tap the button below.<br>
-            2. Allow permissions when asked.
-        </p>
-        <button id="start-btn" class="glow-btn">Start Scanning</button>
-    </div>
-
-    <!-- 3D Canvas -->
     <div id="canvas-container"></div>
 
-    <!-- UI Overlay -->
-    <div id="hud">
-        <div class="hud-header">
-            <div class="status-pill" id="coords">DEC: 00°</div>
-            <div class="status-pill" id="sensor-status">Waiting</div>
+    <!-- HUD -->
+    <div id="hud-layer">
+        <div class="hud-top">
+            <div id="gps-status" class="hud-status">GPS: SEARCHING...</div>
+            <div id="lst-time" class="hud-status">LST: 00:00</div>
         </div>
         
-        <div class="reticle"></div>
-
-        <div id="target-info" style="opacity: 0;">
-            <h2 id="target-name">ORION</h2>
-            <div id="target-sub">The Hunter</div>
-            <div id="target-lore">"Begirt with many a blazing star, Stood the great giant Algebar, Orion, hunter of the beast!"</div>
-            <div id="target-source">Henry Wadsworth Longfellow (1845)</div>
+        <div class="hud-center">
+            <div class="reticle">
+                <div class="reticle-corner tl"></div>
+                <div class="reticle-corner tr"></div>
+                <div class="reticle-corner bl"></div>
+                <div class="reticle-corner br"></div>
+            </div>
         </div>
 
-        <div class="hud-footer">
-            <div class="calibration-area">
-                <span class="calib-label">Manual Sky Calibration (Drag if stars are misaligned)</span>
-                <input type="range" id="calib-slider" min="0" max="360" value="0">
-            </div>
+        <div id="info-panel">
+            <h2 id="target-name">Target</h2>
+            <p id="target-desc">Description</p>
         </div>
     </div>
 
-    <script>
-        /**
-         * ASTRONOMY DATA - THE 88 MODERN CONSTELLATIONS
-         * Compact Data Format: s: [[RA, Dec, Mag], ...], l: [[idx1, idx2], ...]
-         */
-        const CONSTELLATIONS = [
-            // --- ZODIAC (12) ---
-            { id: 'ari', name: 'Aries', label: 'The Ram', lore: "The Ram who bore the Golden Fleece, which Jason and the Argonauts sought.", source: "Greek Mythology / Apollonius of Rhodes (3rd Century BC)", s: [[2.12, 23.46, 2.0], [1.91, 20.8, 2.6], [1.89, 19.3, 3.9], [2.82, 27.2, 4.3]], l: [[0,1], [1,2], [0,3]] },
-            { id: 'tau', name: 'Taurus', label: 'The Bull', lore: "The Bull's head contains the Hyades, the 'Rainy Ones', whose rising foretold wet weather.", source: "Classical Mythology / Tennyson (1832)", s: [[4.60, 16.5, 0.85], [5.43, 28.6, 1.65], [3.79, 24.1, 2.8], [4.33, 15.6, 3.0], [4.47, 19, 3.5], [5.6, 21, 3.0]], l: [[0,3], [0,4], [4,2], [0,1], [1,5]] },
-            { id: 'gem', name: 'Gemini', label: 'The Twins', lore: "Fair Leda's twins, in time to stars decreed, One fought on foot, one curbed the fiery steed.", source: "Alexander Pope, 'Windsor Forest' (1713)", s: [[7.57, 31.9, 1.6], [7.74, 28.0, 1.1], [6.22, 22.5, 3.0], [6.75, 16.5, 1.9], [7.3, 32, 3.0], [7.4, 24, 3.5], [6.4, 25, 3.0], [6.9, 20, 3.5]], l: [[0,4], [4,6], [6,2], [2,7], [7,3], [1,5], [5,7]] },
-            { id: 'cnc', name: 'Cancer', label: 'The Crab', lore: "The crab that nipped Heracles' foot during his fight with the Hydra. Hera placed it among the stars.", source: "Pseudo-Apollodorus, 'Bibliotheca' (2nd Century AD)", s: [[8.97, 11.8, 3.5], [8.28, 9.2, 3.9], [8.72, 21.5, 4.2], [8.4, 18, 4.0], [9.1, 31, 4.0]], l: [[2,3], [3,0], [3,1]] },
-            { id: 'leo', name: 'Leo', label: 'The Lion', lore: "The Nemean Lion, whose golden fur was impervious to weapons. It was Hercules' first labor.", source: "Greek Mythology", s: [[10.14, 11.9, 1.4], [11.82, 14.6, 2.1], [10.33, 19.8, 2.0], [11.23, 20.5, 2.6], [9.8, 26, 3.0], [10.1, 23, 3.4], [11.0, 7, 3.3], [11.5, -0.3, 3.8]], l: [[0,2], [2,5], [5,4], [2,3], [3,1], [0,6], [0,1], [1,7]] },
-            { id: 'vir', name: 'Virgo', label: 'The Virgin', lore: "Thou, Virgin Mother, daughter of thy Son, Humble and high beyond all other creature.", source: "Dante Alighieri, 'Paradiso' (1320)", s: [[13.42, -11.2, 1.0], [12.69, -1.4, 2.7], [13.58, -0.6, 3.4], [14.11, -5.7, 4.0], [14.7, 2, 2.8], [13.0, 11, 2.8], [12.3, -3, 3.0], [13.1, -5, 3.5]], l: [[0,3], [0,7], [7,6], [6,1], [1,2], [2,3], [2,4], [1,5]] },
-            { id: 'lib', name: 'Libra', label: 'The Scales', lore: "The Scales of Justice held by Astraea (Virgo), weighing the souls of men.", source: "Roman Mythology / Manilius (1st Century AD)", s: [[14.84, -16.0, 2.7], [15.28, -9.4, 2.6], [15.60, -29.8, 3.3], [15.0, -25, 3.9]], l: [[0,1], [0,2], [0,3], [1,2]] },
-            { id: 'sco', name: 'Scorpius', label: 'The Scorpion', lore: "There is a place above, where Scorpio bent, In tail and arms surrounds a vast extent.", source: "Ovid, 'Metamorphoses' (8 AD)", s: [[16.49, -26.4, 1.0], [16.08, -19.8, 2.6], [17.56, -37.1, 1.6], [16.0, -22.6, 2.3], [17.6, -43, 1.9], [16.9, -30, 2.9], [15.8, -25, 3.0], [17.8, -39, 2.4]], l: [[1,3], [3,6], [6,0], [0,5], [5,2], [2,7], [7,4]] },
-            { id: 'sgr', name: 'Sagittarius', label: 'The Archer', lore: "The Archer, half horse and half man, aiming his arrow at the heart of the Scorpion.", source: "Eratosthenes, 'Catasterismi' (2nd Century BC)", s: [[18.40, -34.4, 1.8], [18.92, -26.3, 2.0], [18.35, -25.4, 2.8], [19.16, -21.0, 2.0], [18.4, -21, 3.0], [19.9, -27, 3.0], [20.0, -12, 3.5], [19.4, -18, 3.0]], l: [[0,1], [1,2], [2,0], [3,1], [2,4], [3,7], [3,5], [4,7]] }, 
-            { id: 'cap', name: 'Capricornus', label: 'The Goat', lore: "The Sea-Goat, associated with the god Pan who leaped into the Nile to escape Typhon.", source: "Greek Mythology / Hyginus (1st Century BC)", s: [[20.3, -12.5, 3.6], [21.78, -16.1, 2.8], [20.8, -26.9, 3.0], [20.2, -14, 4.0], [21.0, -17, 4.0], [21.4, -22, 3.7]], l: [[0,3], [3,4], [4,1], [1,5], [5,2], [2,0]] },
-            { id: 'aqr', name: 'Aquarius', label: 'The Water Bearer', lore: "Ganymede, the cup-bearer of the gods, pouring nectar from a jar.", source: "Homer, 'Iliad' (8th Century BC)", s: [[22.09, -0.3, 2.9], [21.53, -5.6, 2.9], [22.88, -15.8, 3.3], [22.3, -21, 3.7], [22.5, -8, 3.8], [23.1, -9, 3.9]], l: [[0,1], [1,4], [4,5], [4,2], [2,3]] },
-            { id: 'psc', name: 'Pisces', label: 'The Fishes', lore: "Venus and Cupid, who transformed into fish to escape the monster Typhon.", source: "Ovid, 'Fasti' (8 AD)", s: [[1.9, 2.8, 3.6], [23.9, -6.0, 4.0], [0.1, 21, 3.8], [1.2, 7, 4.0], [0.8, 11, 4.2], [23.5, 0, 4.4]], l: [[1,5], [5,0], [0,3], [3,4], [4,2]] },
+    <!-- Start Overlay -->
+    <div id="start-overlay">
+        <h1>STARFINDER</h1>
+        <p style="text-align:center; max-width: 80%;">
+            Augmented Reality Sky Scanner.<br>
+            Please allow GPS and Device Orientation.
+        </p>
+        <button id="start-btn" class="btn">INITIALIZE SYSTEMS</button>
+        <div id="permission-log" class="loading">Waiting for user input...</div>
+    </div>
 
-            // --- NORTHERN (28) ---
-            { id: 'umi', name: 'Ursa Minor', label: 'Little Dipper', lore: "The Cynosure, the guiding star. 'Straight mine eye hath caught new pleasures whilst the landscape round it measures.'", source: "John Milton, 'L'Allegro' (1631)", s: [[2.53, 89.3, 2.0], [16.7, 82.0, 4.2], [15.8, 77.8, 4.3], [17.5, 71.8, 3.0], [14.8, 74.1, 2.0], [16.2, 75.5, 4.0], [15.4, 72, 4.0]], l: [[0,1], [1,5], [5,2], [2,4], [4,3], [3,6], [6,2]] },
-            { id: 'uma', name: 'Ursa Major', label: 'Big Dipper', lore: "Callisto, transformed into a bear by Hera, now wanders the sky, never permitted to set in the ocean.", source: "Ovid, 'Metamorphoses' (8 AD)", s: [[11.06, 61.8, 1.8], [11.03, 56.4, 2.4], [11.89, 53.7, 2.4], [12.25, 57.0, 3.3], [12.90, 56.0, 1.8], [13.39, 54.9, 2.3], [13.79, 49.3, 1.9], [9.5, 63, 3.0], [9.0, 67, 3.1], [8.5, 60, 3.2], [10.3, 41, 3.0], [11.2, 33, 3.0], [11.8, 37, 3.0]], l: [[0,1], [1,2], [2,3], [3,0], [3,4], [4,5], [5,6], [0,7], [7,8], [7,9], [2,10], [10,11], [11,12]] },
-            { id: 'cas', name: 'Cassiopeia', label: 'The Queen', lore: "The Queen who boasted she was fairer than the Nereids, sentenced to sit upside down on her throne.", source: "Aratus, 'Phaenomena' (270 BC)", s: [[0.67, 56.5, 2.2], [0.15, 59.1, 2.3], [0.93, 60.7, 2.5], [1.43, 60.2, 2.7], [1.90, 63.7, 3.4]], l: [[1,0], [0,2], [2,3], [3,4]] },
-            { id: 'cep', name: 'Cepheus', label: 'The King', lore: "The King of Aethiopia, husband of Cassiopeia and father of Andromeda.", source: "Greek Mythology", s: [[21.31, 62.6, 2.4], [22.49, 58.2, 3.4], [23.65, 77.6, 3.2], [20.75, 70, 3.5], [23.2, 73, 4.0]], l: [[0,1], [1,2], [2,4], [4,3], [3,0]] },
-            { id: 'dra', name: 'Draco', label: 'The Dragon', lore: "The dragon Ladon who guarded the Golden Apples of the Hesperides, slain by Hercules.", source: "Hyginus, 'Astronomica' (1st Century BC)", s: [[17.53, 51.5, 2.2], [19.21, 67.6, 3.0], [14.07, 64.4, 3.6], [17.9, 56, 3.0], [15.4, 61, 3.5], [19.8, 70, 3.2], [20.4, 74, 3.3], [18.0, 78, 4.0], [11.0, 70, 3.8]], l: [[0,3], [3,1], [1,5], [5,6], [6,7], [7,2], [2,4], [2,8]] },
-            { id: 'boo', name: 'Bootes', label: 'The Herdsman', lore: "The Bear Driver, forever chasing the Great Bear around the pole.", source: "Homer, 'Odyssey' (8th Century BC)", s: [[14.26, 19.2, 0.0], [14.53, 38.3, 3.5], [14.7, 27, 2.7], [13.75, 18.4, 2.7], [15.2, 33, 3.0], [14.3, 51, 3.5], [15.0, 40, 3.6]], l: [[0,3], [0,2], [2,4], [4,1], [1,6], [1,5]] },
-            { id: 'cyg', name: 'Cygnus', label: 'The Swan', lore: "The Swan of Leda, or Orpheus transformed. It flies down the Milky Way.", source: "Ovid, 'Metamorphoses' (8 AD)", s: [[20.69, 45.3, 1.25], [20.37, 40.2, 2.2], [19.51, 28.0, 3.0], [19.49, 45.1, 2.8], [20.77, 34.0, 2.4], [21.2, 30, 3.2], [21.7, 28, 3.9], [19.2, 51, 3.8], [19.6, 53, 4.0]], l: [[0,1], [1,2], [3,1], [1,4], [4,5], [5,6], [3,7], [7,8]] },
-            { id: 'lyr', name: 'Lyra', label: 'The Harp', lore: "The lyre of Orpheus, which could charm stones and trees, placed in the sky after his death.", source: "Greek Mythology", s: [[18.62, 38.8, 0.03], [18.83, 33, 3.2], [19.28, 32.7, 3.5], [18.9, 41, 4.0], [19.1, 37, 4.2]], l: [[0,1], [1,2], [2,4], [4,3], [3,0]] },
-            { id: 'aql', name: 'Aquila', label: 'The Eagle', lore: "The bird of Zeus that carries his thunderbolts.", source: "Greek Mythology", s: [[19.85, 8.9, 0.8], [19.76, 10.6, 2.7], [19.92, 6.4, 3.7], [19.1, 15, 3.0], [19.5, 3, 3.2], [20.2, -2, 3.4], [19.0, -5, 4.0]], l: [[1,0], [0,2], [0,3], [0,4], [4,5], [5,6]] },
-            { id: 'her', name: 'Hercules', label: 'The Hero', lore: "The kneeler, crushing the head of the dragon Draco.", source: "Aratus, 'Phaenomena' (270 BC)", s: [[16.5, 21.5, 3.5], [17.25, 24.8, 3.0], [17.25, 14.4, 3.0], [18, 28, 3.9], [16.0, 17, 3.0], [16.3, 46, 3.8], [18.1, 42, 3.0], [15.8, 37, 3.2]], l: [[0,1], [1,3], [2,1], [2,0], [0,4], [1,5], [3,6], [5,7]] },
-            { id: 'aur', name: 'Auriga', label: 'Charioteer', lore: "Erichthonius of Athens, the first to harness four horses to a chariot.", source: "Pseudo-Eratosthenes", s: [[5.27, 46.0, 0.1], [5.99, 45.0, 1.9], [5.0, 30, 2.7], [4.5, 33, 3.0], [5.6, 37, 3.0], [5.0, 43, 3.0]], l: [[0,1], [1,4], [4,2], [2,3], [3,5], [5,0]] },
-            { id: 'per', name: 'Perseus', label: 'The Hero', lore: "The slayer of Medusa, flying on winged sandals and holding the Gorgon's head.", source: "Greek Mythology", s: [[3.41, 49.9, 1.8], [3.14, 41.0, 2.1], [3.9, 47, 3.0], [3.7, 42, 3.8], [2.8, 55, 3.0], [4.1, 48, 4.0], [2.5, 57, 4.0]], l: [[0,1], [1,3], [0,2], [2,5], [0,4], [4,6]] },
-            { id: 'and', name: 'Andromeda', label: 'Princess', lore: "The chained princess, saved from the sea monster Cetus by Perseus.", source: "Ovid, 'Metamorphoses' (8 AD)", s: [[0.14, 29.1, 2.1], [1.16, 35.6, 2.0], [2.06, 42.3, 2.1], [0.6, 30, 4.4], [1.8, 40, 4.0]], l: [[0,1], [1,2], [0,3], [1,4]] },
-            { id: 'peg', name: 'Pegasus', label: 'Winged Horse', lore: "The winged horse born from the blood of Medusa.", source: "Greek Mythology", s: [[23.08, 28.1, 2.4], [23.06, 15.2, 2.5], [0.22, 15.2, 2.8], [22.1, 6, 3.0], [21.7, 10, 3.5], [22.5, 30, 3.0], [21.5, 20, 3.8]], l: [[0,1], [1,2], [2,0], [1,3], [3,4], [0,5], [5,6]] },
-            { id: 'tri', name: 'Triangulum', label: 'Triangle', lore: "Said to represent the island of Sicily or a surveyors' tool.", source: "Hyginus", s: [[1.88, 29.6, 3.4], [2.16, 35.0, 3.0], [2.29, 33.8, 4.0]], l: [[0,1], [1,2], [2,0]] },
-            { id: 'oph', name: 'Ophiuchus', label: 'Serpent Bearer', lore: "Asclepius, the healer who learned the secret of life from a serpent.", source: "Greek Mythology", s: [[17.58, 12.6, 2.0], [16.3, -10, 2.5], [17.7, 4, 2.7], [17.1, -15, 3.0], [16.9, 9, 3.0], [18.0, 9, 3.2], [16.2, -4, 3.8]], l: [[0,4], [4,1], [1,3], [0,5], [5,2], [1,6]] },
-            { id: 'ser', name: 'Serpens', label: 'The Serpent', lore: "The snake held by Ophiuchus. It is the only constellation split into two parts.", source: "Ptolemy, 'Almagest' (2nd Century AD)", s: [[15.74, 6.4, 2.6], [18.9, 4.2, 3.2], [15.5, 15, 3.7], [16.1, 10, 4.0], [18.4, 0, 4.0], [18.0, -2, 4.0]], l: [[2,3], [3,0], [4,1], [4,5]] },
-            { id: 'del', name: 'Delphinus', label: 'Dolphin', lore: "The dolphin who helped Poseidon woo Amphitrite.", source: "Eratosthenes", s: [[20.62, 15.9, 3.8], [20.65, 14.6, 4.0], [20.78, 16.0, 3.6], [20.8, 15, 3.9], [20.3, 11, 4.5]], l: [[0,1], [1,2], [2,3], [3,0], [1,4]] },
-            { id: 'sge', name: 'Sagitta', label: 'Arrow', lore: "The arrow used by Apollo to kill the Cyclopes.", source: "Eratosthenes", s: [[19.9, 17, 3.5], [19.6, 18, 4.3], [19.4, 18, 5.0], [20.0, 16, 5.0]], l: [[2,1], [1,0], [0,3]] },
-            { id: 'crb', name: 'Corona Borealis', label: 'N. Crown', lore: "The crown of Ariadne, thrown into the sky by Dionysus.", source: "Ovid, 'Fasti'", s: [[15.58, 26.9, 2.2], [15.8, 26, 4.0], [15.3, 27, 3.7], [16.1, 26, 4.6], [15.2, 29, 4.0]], l: [[2,0], [0,1], [1,3], [2,4]] },
-            { id: 'cvn', name: 'Canes Venatici', label: 'Hunting Dogs', lore: "The dogs Asterion and Chara, held on a leash by Bootes.", source: "Hevelius (1687)", s: [[12.93, 38.3, 2.8], [12.4, 41, 4.2]], l: [[0,1]] },
-            { id: 'com', name: 'Coma Berenices', label: 'Berenice\'s Hair', lore: "The amber hair of Queen Berenice II of Egypt, offered to Aphrodite.", source: "Callimachus / Catullus (3rd Century BC)", s: [[13.1, 17.5, 4.2], [13.2, 27, 4.3], [12.5, 23, 4.5]], l: [[0,2], [2,1]] },
-            { id: 'lac', name: 'Lacerta', label: 'Lizard', lore: "A modern constellation created to fill a gap in the northern sky.", source: "Hevelius (1687)", s: [[22.5, 50, 3.8], [22.3, 46, 4.0], [22.8, 42, 4.5], [22.4, 39, 4.4]], l: [[0,1], [1,2], [2,3]] },
-            { id: 'vul', name: 'Vulpecula', label: 'Fox', lore: "Originally 'Vulpecula et Anser' (the Fox and the Goose).", source: "Hevelius (1687)", s: [[19.5, 24.5, 4.4], [19.8, 27, 4.8], [20.2, 24, 4.6]], l: [[0,1], [1,2]] },
-            { id: 'lyn', name: 'Lynx', label: 'Lynx', lore: "Named so because one needs the eyes of a lynx to see it.", source: "Hevelius (1687)", s: [[9.3, 34.4, 3.1], [8.0, 43, 3.8], [7.4, 39, 4.0], [6.5, 59, 4.0], [9.2, 36, 4.0]], l: [[0,1], [1,2], [1,3], [0,4]] },
-            { id: 'lmi', name: 'Leo Minor', label: 'Little Lion', lore: "A faint companion to the great Lion.", source: "Hevelius (1687)", s: [[10.9, 34, 3.8], [10.2, 31, 4.5], [10.5, 36, 4.4]], l: [[0,1], [0,2]] },
-            { id: 'cam', name: 'Camelopardalis', label: 'Giraffe', lore: "The 'Camel-Leopard' (Giraffe), representing the animal Rebecca rode to meet Isaac.", source: "Petrus Plancius (1612)", s: [[5.0, 60, 4.0], [4.5, 55, 4.5], [3.5, 60, 4.5], [6.0, 60, 4.5], [12.0, 77, 4.5]], l: [[0,1], [0,2], [0,3], [3,4]] },
-            { id: 'equ', name: 'Equuleus', label: 'Little Horse', lore: "Often seen as Celeris, the brother of Pegasus.", source: "Greek Mythology", s: [[21.2, 5, 3.9], [21.4, 10, 4.5], [21.1, 7, 4.7]], l: [[0,1], [0,2], [2,1]] },
+    <!-- Application Logic -->
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { DeviceOrientationControls } from 'three/addons/controls/DeviceOrientationControls.js';
 
-            // --- SOUTHERN (48) ---
-            { id: 'ori', name: 'Orion', label: 'The Hunter', lore: "Begirt with many a blazing star, Stood the great giant Algebar, Orion, hunter of the beast!", source: "Henry Wadsworth Longfellow (1845)", s: [[5.91, 7.4, 0.4], [5.24, -8.2, 0.1], [5.41, 6.3, 1.6], [5.53, -0.3, 2.2], [5.60, -1.2, 1.7], [5.67, -1.9, 1.8], [5.79, -9.6, 2.1], [4.8, 6.5, 3.2], [6.0, 20, 4.0]], l: [[0,2], [0,5], [2,3], [3,4], [4,5], [5,6], [1,6], [3,1], [2,7], [0,8]] },
-            { id: 'cma', name: 'Canis Major', label: 'Big Dog', lore: "The great hunting dog of Orion, containing Sirius, the brightest star in the sky.", source: "Greek Mythology", s: [[6.75, -16.7, -1.5], [6.97, -28.9, 1.5], [7.05, -26.4, 1.8], [6.33, -17.9, 1.9], [6.6, -30, 2.0], [7.2, -23, 2.4]], l: [[0,3], [0,2], [2,1], [1,4], [2,5]] },
-            { id: 'cmi', name: 'Canis Minor', label: 'Little Dog', lore: "The smaller of Orion's hunting dogs.", source: "Greek Mythology", s: [[7.65, 5.2, 0.4], [7.45, 8.3, 2.9]], l: [[0,1]] },
-            { id: 'cru', name: 'Crux', label: 'Southern Cross', lore: "The cross which points the way to the South Celestial Pole.", source: "Navigation History", s: [[12.44, -63.1, 0.8], [12.79, -59.7, 1.3], [12.51, -57.1, 1.6], [12.25, -58.7, 2.8]], l: [[0,2], [1,3]] },
-            { id: 'cen', name: 'Centaurus', label: 'Centaur', lore: "Chiron, the wise centaur and tutor of heroes.", source: "Greek Mythology", s: [[14.66, -60.8, 0.0], [14.06, -60.4, 0.6], [12.7, -50, 2.2], [13.6, -47, 2.3], [14.1, -42, 2.5], [13.8, -33, 2.8], [11.5, -42, 3.0]], l: [[0,1], [1,2], [2,3], [3,4], [4,5], [2,6]] },
-            { id: 'car', name: 'Carina', label: 'Keel', lore: "The keel of the Argo Navis, the ship of Jason and the Argonauts.", source: "Greek Mythology", s: [[6.40, -52.7, -0.7], [9.22, -59, 1.7], [8.3, -59.5, 1.9], [10.2, -61, 2.0], [7.5, -57, 2.2], [9.3, -55, 2.5]], l: [[0,4], [4,2], [2,1], [1,3], [3,5]] },
-            { id: 'eri', name: 'Eridanus', label: 'The River', lore: "The celestial river into which Phaethon fell.", source: "Greek Mythology", s: [[1.63, -57.2, 0.5], [2.9, -40, 2.9], [5.1, -5, 2.8], [4.2, -34, 3.0], [3.3, -9, 3.5], [4.5, -15, 3.5]], l: [[0,3], [3,1], [1,5], [5,4], [4,2]] },
-            { id: 'pup', name: 'Puppis', label: 'Poop Deck', lore: "The stern of the Argo Navis.", source: "Greek Mythology", s: [[8.05, -40, 2.2], [7.6, -43, 2.7], [6.5, -50, 2.8], [7.8, -25, 3.0]], l: [[0,1], [1,2], [0,3]] },
-            { id: 'vel', name: 'Vela', label: 'Sails', lore: "The sails of the Argo Navis.", source: "Greek Mythology", s: [[8.16, -47.3, 1.7], [9.13, -43, 1.9], [10.1, -55, 2.2], [8.7, -52, 2.5]], l: [[0,1], [1,3], [3,2]] },
-            { id: 'gru', name: 'Grus', label: 'The Crane', lore: "One of the 'Southern Birds' defined by Petrus Plancius.", source: "Plancius / Keyser (1598)", s: [[22.13, -46.9, 1.7], [22.7, -46.8, 2.1], [22.8, -41, 3.0], [23.2, -45, 3.5]], l: [[0,1], [0,2], [1,3]] },
-            { id: 'phe', name: 'Phoenix', label: 'Phoenix', lore: "The mythical bird that is reborn from its own ashes.", source: "Bayer (1603)", s: [[0.43, -42.3, 2.4], [1.4, -46, 3.3], [23.9, -42, 3.8], [0.8, -55, 4.0]], l: [[0,1], [0,2], [0,3]] },
-            { id: 'tuc', name: 'Tucana', label: 'Toucan', lore: "An exotic bird of the south.", source: "Plancius (1598)", s: [[22.3, -60, 2.8], [23.8, -65, 4.0], [0.5, -70, 4.2]], l: [[0,1], [1,2]] },
-            { id: 'pav', name: 'Pavo', label: 'Peacock', lore: "The bird sacred to Hera, with eyes on its tail feathers.", source: "Bayer (1603)", s: [[20.4, -56.7, 1.9], [18.7, -65, 3.5], [19.8, -70, 4.0]], l: [[0,1], [1,2]] },
-            { id: 'hyi', name: 'Hydrus', label: 'Male Water Snake', lore: "The lesser water snake of the south.", source: "Bayer (1603)", s: [[1.9, -61.5, 2.8], [0.4, -77, 3.0], [3.2, -78, 3.2]], l: [[0,1], [1,2]] },
-            { id: 'hya', name: 'Hydra', label: 'Water Snake', lore: "The largest constellation, the snake slain by Hercules.", source: "Greek Mythology", s: [[9.46, -8.7, 2.0], [8.6, 6, 3.4], [13.0, -23, 3.0], [14.0, -26, 3.0], [8.8, 6, 4.3], [8.9, 5, 4.4], [10.5, -15, 3.5], [11.5, -28, 3.8]], l: [[1,0], [0,6], [6,7], [7,2], [2,3]] },
-            { id: 'crt', name: 'Crater', label: 'The Cup', lore: "The cup of the god Apollo.", source: "Greek Mythology", s: [[11.3, -14.8, 3.5], [11.2, -17, 4.0], [11.8, -18, 3.8], [11.0, -6, 4.5]], l: [[0,1], [1,2], [2,0], [0,3]] },
-            { id: 'crv', name: 'Corvus', label: 'The Crow', lore: "The bird that brought water to Apollo in the cup (Crater).", source: "Greek Mythology", s: [[12.5, -16.5, 2.6], [12.2, -17.5, 2.9], [12.3, -22, 3.0], [12.6, -23, 2.6]], l: [[0,1], [1,2], [2,3], [3,0]] },
-            { id: 'lep', name: 'Lepus', label: 'The Hare', lore: "A hare chased eternally by Orion's dogs.", source: "Greek Mythology", s: [[5.55, -17.8, 2.6], [5.4, -20.7, 2.8], [5.1, -11, 3.3], [5.8, -14, 3.5], [5.2, -24, 3.5]], l: [[0,1], [0,2], [2,3], [1,4]] },
-            { id: 'col', name: 'Columba', label: 'The Dove', lore: "The dove released by Noah, or the one that flew through the Clashing Rocks.", source: "Plancius (1592)", s: [[5.66, -34, 2.6], [6.0, -32, 3.0], [5.3, -35, 3.8]], l: [[0,1], [0,2]] },
-            { id: 'ara', name: 'Ara', label: 'The Altar', lore: "The altar on which the gods swore allegiance before the Titanomachy.", source: "Greek Mythology", s: [[17.5, -49, 2.8], [17.4, -55, 2.9], [16.9, -53, 3.0], [18.1, -50, 3.5]], l: [[0,1], [1,2], [0,3]] },
-            { id: 'lup', name: 'Lupus', label: 'The Wolf', lore: "A beast about to be sacrificed by the Centaur.", source: "Ptolemy (2nd Century AD)", s: [[14.7, -47, 2.3], [15.0, -52, 2.7], [15.3, -40, 3.0], [14.3, -43, 3.5], [15.6, -36, 3.6]], l: [[0,1], [1,2], [0,3], [2,4]] },
-            { id: 'ind', name: 'Indus', label: 'Indian', lore: "Represents an indigenous person of the Americas or Asia.", source: "Bayer (1603)", s: [[20.6, -45, 3.1], [21.0, -55, 3.8], [22.0, -60, 4.0]], l: [[0,1], [1,2]] },
-            { id: 'ant', name: 'Antlia', label: 'Air Pump', lore: "Commemorates the invention of the air pump by Robert Boyle.", source: "Lacaille (1763)", s: [[10.4, -31, 4.2], [9.5, -30, 4.5], [10.8, -36, 4.5]], l: [[0,1], [0,2]] },
-            { id: 'aps', name: 'Apus', label: 'Bird of Paradise', lore: "The 'footless' bird of paradise.", source: "Bayer (1603)", s: [[14.8, -79, 3.8], [16.0, -75, 4.0], [17.0, -77, 4.0]], l: [[0,1], [1,2]] },
-            { id: 'cae', name: 'Caelum', label: 'Chisel', lore: "The sculptor's chisel.", source: "Lacaille (1763)", s: [[4.7, -42, 4.4], [4.9, -38, 4.5]], l: [[0,1]] },
-            { id: 'cha', name: 'Chamaeleon', label: 'Chameleon', lore: "The color-changing lizard.", source: "Bayer (1603)", s: [[8.3, -76, 4.0], [10.5, -80, 4.2], [12.0, -78, 4.0]], l: [[0,1], [1,2]] },
-            { id: 'cir', name: 'Circinus', label: 'Compass', lore: "The drafting compass.", source: "Lacaille (1763)", s: [[14.7, -65, 3.2], [15.3, -62, 4.0], [14.5, -69, 4.5]], l: [[0,1], [0,2]] },
-            { id: 'dor', name: 'Dorado', label: 'Swordfish', lore: "The Dolphinfish or Goldfish.", source: "Bayer (1603)", s: [[4.5, -55, 3.3], [5.2, -60, 4.0], [6.1, -65, 4.2]], l: [[0,1], [1,2]] },
-            { id: 'for', name: 'Fornax', label: 'Furnace', lore: "The chemical furnace.", source: "Lacaille (1763)", s: [[3.2, -29, 3.8], [2.8, -32, 4.5], [2.5, -28, 5.0]], l: [[0,1], [1,2]] },
-            { id: 'hor', name: 'Horologium', label: 'Clock', lore: "The pendulum clock.", source: "Lacaille (1763)", s: [[4.2, -42, 3.8], [3.5, -45, 4.5], [2.8, -50, 4.8]], l: [[0,1], [1,2]] },
-            { id: 'men', name: 'Mensa', label: 'Table Mountain', lore: "Named after Table Mountain in South Africa.", source: "Lacaille (1763)", s: [[5.5, -80, 5.0], [6.0, -75, 5.2], [4.5, -78, 5.3]], l: [[0,1], [0,2]] },
-            { id: 'mic', name: 'Microscopium', label: 'Microscope', lore: "Commemorating the invention of the microscope.", source: "Lacaille (1763)", s: [[21.0, -32, 4.7], [20.5, -40, 5.0], [21.5, -41, 5.0]], l: [[0,1], [0,2]] },
-            { id: 'mon', name: 'Monoceros', label: 'Unicorn', lore: "The mythical single-horned horse.", source: "Plancius (1612)", s: [[6.4, -7, 3.7], [6.5, -3, 3.9], [7.2, -10, 4.0], [8.1, -5, 4.2]], l: [[0,1], [0,2], [2,3]] },
-            { id: 'mus', name: 'Musca', label: 'Fly', lore: "The southern fly.", source: "Bayer (1603)", s: [[12.6, -69, 2.7], [12.8, -71, 3.0], [13.2, -67, 3.5], [11.8, -70, 3.8]], l: [[0,1], [1,2], [2,3], [1,3]] },
-            { id: 'nor', name: 'Norma', label: 'Level', lore: "The carpenter's level and square.", source: "Lacaille (1763)", s: [[16.2, -50, 4.0], [16.5, -45, 4.5], [15.8, -55, 4.8]], l: [[0,1], [0,2]] },
-            { id: 'oct', name: 'Octans', label: 'Octant', lore: "The navigational instrument.", source: "Lacaille (1763)", s: [[21.0, -88, 3.7], [14.0, -85, 4.2], [19.0, -80, 4.5]], l: [[0,1], [0,2]] }, // South celestial pole
-            { id: 'pic', name: 'Pictor', label: 'Easel', lore: "The painter's easel.", source: "Lacaille (1763)", s: [[6.8, -50, 3.2], [5.5, -55, 4.0], [6.2, -45, 4.2]], l: [[0,1], [0,2]] },
-            { id: 'psa', name: 'Piscis Austrinus', label: 'S. Fish', lore: "The fish drinking the water poured by Aquarius.", source: "Greek Mythology", s: [[22.96, -29.6, 1.1], [22.5, -32, 4.0], [22.2, -30, 4.2], [21.8, -30, 4.5]], l: [[0,1], [1,2], [2,3]] }, // Fomalhaut
-            { id: 'pyx', name: 'Pyxis', label: 'Compass', lore: "The mariner's compass of the Argo.", source: "Lacaille (1763)", s: [[9.1, -25, 3.7], [8.7, -27, 4.0], [9.3, -30, 4.5]], l: [[0,1], [0,2]] },
-            { id: 'ret', name: 'Reticulum', label: 'Net', lore: "The reticle of a telescope.", source: "Lacaille (1763)", s: [[4.2, -62, 3.3], [3.8, -65, 4.0], [4.5, -60, 4.4], [3.5, -60, 4.5]], l: [[0,1], [1,2], [2,3], [3,0]] },
-            { id: 'scl', name: 'Sculptor', label: 'Sculptor', lore: "The sculptor's studio.", source: "Lacaille (1763)", s: [[0.9, -32, 4.3], [23.9, -30, 4.5], [0.2, -35, 4.5], [23.5, -37, 4.5]], l: [[0,1], [0,2], [2,3]] },
-            { id: 'sct', name: 'Scutum', label: 'Shield', lore: "The shield of King Sobieski of Poland.", source: "Hevelius (1684)", s: [[18.5, -8, 3.8], [18.7, -10, 4.2], [18.4, -13, 4.5], [18.9, -5, 4.5]], l: [[0,1], [1,2], [0,3]] },
-            { id: 'sex', name: 'Sextans', label: 'Sextant', lore: "The astronomical sextant.", source: "Hevelius (1687)", s: [[10.1, -0.4, 4.5], [10.5, 3, 5.0], [9.8, -5, 5.0]], l: [[0,1], [0,2]] },
-            { id: 'tel', name: 'Telescopium', label: 'Telescope', lore: "The aerial telescope.", source: "Lacaille (1763)", s: [[18.5, -46, 3.5], [19.0, -50, 4.0], [18.2, -52, 4.5]], l: [[0,1], [0,2]] },
-            { id: 'tra', name: 'Triangulum Australe', label: 'S. Triangle', lore: "A navigational triangle in the south.", source: "Bayer (1603)", s: [[16.8, -69, 1.9], [16.0, -63, 2.8], [15.3, -68, 2.9]], l: [[0,1], [1,2], [2,0]] },
-            { id: 'vol', name: 'Volans', label: 'Flying Fish', lore: "The fish that flies above the water.", source: "Bayer (1603)", s: [[8.0, -68, 3.8], [7.2, -74, 3.7], [9.0, -70, 4.0], [7.5, -65, 4.2]], l: [[0,1], [1,2], [2,3], [3,0]] },
-            { id: 'cra', name: 'Corona Australis', label: 'S. Crown', lore: "A wreath of laurel.", source: "Greek Mythology", s: [[19.1, -37, 4.1], [18.9, -37.8, 4.0], [18.5, -38, 4.5], [19.3, -39, 4.5]], l: [[0,1], [1,2], [1,3]] },
-            { id: 'cet', name: 'Cetus', label: 'Sea Monster', lore: "The monster sent by Poseidon to devour Andromeda.", source: "Greek Mythology", s: [[2.7, 3, 2.5], [0.7, -17, 2.0], [0.3, -8, 3.5], [3.2, 10, 4.0], [1.8, -10, 3.5], [2.2, -12, 4.0], [0.5, -20, 3.8]], l: [[0,3], [1,2], [1,6], [2,4], [4,5]] }
+        // --- CONFIGURATION ---
+        const STAR_COUNT = 800; // Background stars
+        const SPHERE_RADIUS = 500;
+        const CONSTELLATION_COLOR = 0x00ffff;
+        
+        // --- DATA: CONSTELLATIONS ---
+        // RA in Hours (0-24), Dec in Degrees (-90 to 90)
+        // Structure: Name, Description, Lines (pairs of star indices), Stars (coords)
+        const DATABASE = [
+            {
+                id: 'orion',
+                name: 'Orion',
+                desc: 'The Hunter. Prominent constellation located on the celestial equator.',
+                stars: [
+                    { ra: 5.91, dec: 7.4, name: 'Betelgeuse' }, // 0
+                    { ra: 5.24, dec: 6.3, name: 'Bellatrix' },  // 1
+                    { ra: 5.55, dec: -0.3, name: 'Mintaka' },   // 2 (Belt)
+                    { ra: 5.60, dec: -1.2, name: 'Alnilam' },   // 3 (Belt)
+                    { ra: 5.67, dec: -1.9, name: 'Alnitak' },   // 4 (Belt)
+                    { ra: 5.79, dec: -9.6, name: 'Saiph' },     // 5
+                    { ra: 5.24, dec: -8.2, name: 'Rigel' }      // 6
+                ],
+                connections: [[0,1], [1,2], [2,3], [3,4], [4,5], [4,0], [2,6]]
+            },
+            {
+                id: 'ursa_major',
+                name: 'Ursa Major',
+                desc: 'The Great Bear. Contains the Big Dipper asterism.',
+                stars: [
+                    { ra: 11.06, dec: 61.75, name: 'Dubhe' },   // 0
+                    { ra: 11.03, dec: 56.38, name: 'Merak' },   // 1
+                    { ra: 11.89, dec: 53.69, name: 'Phecda' },  // 2
+                    { ra: 12.25, dec: 57.03, name: 'Megrez' },  // 3
+                    { ra: 12.90, dec: 55.95, name: 'Alioth' },  // 4
+                    { ra: 13.39, dec: 54.92, name: 'Mizar' },   // 5
+                    { ra: 13.79, dec: 49.31, name: 'Alkaid' }   // 6
+                ],
+                connections: [[0,1], [1,2], [2,3], [3,0], [3,4], [4,5], [5,6]]
+            },
+            {
+                id: 'bootes',
+                name: 'Bootes',
+                desc: 'The Herdsman. Contains Arcturus, the third-brightest star.',
+                stars: [
+                    { ra: 14.26, dec: 19.18, name: 'Arcturus' }, // 0
+                    { ra: 14.77, dec: 27.07, name: 'Izar' },     // 1
+                    { ra: 13.91, dec: 18.39, name: 'Muphrid' },  // 2
+                    { ra: 15.26, dec: 33.31, name: 'Seginus' },  // 3
+                    { ra: 14.53, dec: 38.30, name: 'Nekkar' },   // 4
+                    { ra: 14.73, dec: 40.39, name: 'Alkalurops'} // 5
+                ],
+                connections: [[0,1], [0,2], [1,3], [3,4], [4,5]]
+            }
         ];
 
         // --- APP STATE ---
-        let scene, camera, renderer, celestialGroup;
-        let starSphereRadius = 500;
-        let isSensorActive = false;
-        let manualControl = { isDragging: false, lon: 0, lat: 0, lastX: 0, lastY: 0 };
-        let calibrationOffset = 0; // Manual rotation offset
-        let lstRotation = 0; // Local Sidereal Time rotation
+        let scene, camera, renderer, controls;
+        let starContainer; // Holds all stars to rotate them together
+        let raycaster;
+        let constellationHitSpheres = []; // Invisible spheres for collision detection
         
-        function logMsg(msg) {
-            const el = document.getElementById('debug-log');
-            if(el) el.innerHTML = msg;
-            console.log(msg);
-        }
+        let userLat = 0;
+        let userLon = 0;
+        let gpsLocked = false;
+        let deviceControlActive = false;
 
+        // --- INITIALIZATION ---
         function init() {
+            // Scene Setup
             const container = document.getElementById('canvas-container');
-            
-            // Scene
             scene = new THREE.Scene();
-
-            // Create a group to hold the entire sky so we can rotate it based on time
-            celestialGroup = new THREE.Group();
-            scene.add(celestialGroup);
-
-            // Add stars to the GROUP, not the SCENE
-            addBackgroundStars();
-            buildConstellations();
+            // Background color is handled by CSS, but fog helps depth
+            scene.fog = new THREE.FogExp2(0x000000, 0.001);
 
             // Camera
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 0, 0); 
+            // Initial look direction (North)
+            camera.position.set(0, 0, 0.1); 
 
             // Renderer
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
             container.appendChild(renderer.domElement);
 
-            // Inputs
-            window.addEventListener('resize', onWindowResize, false);
-            setupInputHandlers();
-            
-            animate();
+            // Objects Group
+            starContainer = new THREE.Group();
+            scene.add(starContainer);
+
+            // Tools
+            raycaster = new THREE.Raycaster();
+
+            // Populate Sky
+            createProceduralStars();
+            createConstellations();
+
+            // Events
+            window.addEventListener('resize', onWindowResize);
         }
 
-        // --- ASTRONOMY & TIME LOGIC ---
+        // --- ASTRONOMY MATH ---
 
-        function sphericalToCartesian(raHours, decDeg, radius) {
-            // Mapping RA/Dec to 3D Sphere
-            // RA 0h = 0 rad, RA 24h = 2PI rad
-            // Dec +90 = North Pole (+Y in Threejs)
+        // Convert RA (hours), Dec (degrees) to Cartesian (x,y,z) on unit sphere
+        function raDecToVector(ra, dec, radius) {
+            // RA: 0h = 0deg, 24h = 360deg. 
+            // In ThreeJS (Y-up), we map Celestial Sphere:
+            // Y axis = Celestial North Pole (Dec = 90)
+            // X/Z plane = Celestial Equator (Dec = 0)
             
-            const phi = (90 - decDeg) * (Math.PI / 180); 
-            // We shift theta by PI because standard RA 0 usually aligns with +X or +Z depending on convention.
-            // In our system, we'll calibrate LST to match.
-            const theta = (raHours / 24) * 2 * Math.PI; 
-
-            // x = r * sin(phi) * cos(theta)
-            // z = r * sin(phi) * sin(theta)
-            // y = r * cos(phi)
+            const phi = (90 - dec) * (Math.PI / 180); // Polar angle (from up axis)
+            const theta = (ra / 24) * 2 * Math.PI; // Azimuthal angle (RA) - standard math usually uses right-hand rule
             
+            // Note: We negate theta or swap sin/cos depending on coordinate system chirality. 
+            // Here we use standard spherical conversion.
             const x = radius * Math.sin(phi) * Math.cos(theta);
+            const y = radius * Math.cos(phi); // Y is UP (North)
             const z = radius * Math.sin(phi) * Math.sin(theta);
-            const y = radius * Math.cos(phi);
-
+            
             return new THREE.Vector3(x, y, z);
         }
 
-        function calculateLST(longitude) {
-            const now = new Date();
-            // Calculate Greenwich Sidereal Time (GST)
-            // Simplified approximation formula
-            const jd = (now.getTime() / 86400000) + 2440587.5;
-            const d = jd - 2451545.0;
-            let gmst = 18.697374558 + 24.06570982441908 * d;
-            gmst %= 24;
-            if (gmst < 0) gmst += 24;
-
-            // Local Sidereal Time = GST + Longitude (hours)
-            let lst = gmst + (longitude / 15.0);
-            lst %= 24;
-            if (lst < 0) lst += 24;
-            
-            return lst;
+        // Generate a soft glow texture programmatically
+        function createStarTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 32;
+            canvas.height = 32;
+            const context = canvas.getContext('2d');
+            const gradient = context.createRadialGradient(16, 16, 0, 16, 16, 16);
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+            gradient.addColorStop(0.2, 'rgba(255, 255, 255, 0.8)');
+            gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.2)');
+            gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            context.fillStyle = gradient;
+            context.fillRect(0, 0, 32, 32);
+            return new THREE.CanvasTexture(canvas);
         }
 
-        function alignSky(latitude, longitude) {
-            const lst = calculateLST(longitude);
-            logMsg(`GPS Locked. Lat: ${latitude.toFixed(1)}, Lon: ${longitude.toFixed(1)}, LST: ${lst.toFixed(1)}h`);
+        // --- OBJECT CREATION ---
 
-            // Rotate the entire celestial sphere
-            // Earth rotates 15 deg/hour.
-            // If LST is 0h, RA 0h is on the meridian.
-            // In 3D, we rotate around Y axis.
-            
-            // This is an approximation. We rotate the sky -LST.
-            // We convert hours to radians: (lst / 24) * 2PI
-            // There might be a phase shift needed (Math.PI or similar) depending on our XYZ setup.
-            // We use the slider to fine tune, but this gets us close.
-            
-            const radians = (lst / 24) * Math.PI * 2;
-            lstRotation = -radians; // Earth rotates East, so Sky rotates West (negative)
-            updateSkyRotation();
-            
-            document.getElementById('sensor-status').innerText = "GPS ACTIVE";
-        }
-
-        function updateSkyRotation() {
-            // Combine LST rotation + Manual Calibration
-            const manualRad = (calibrationOffset / 360) * Math.PI * 2;
-            celestialGroup.rotation.y = lstRotation + manualRad;
-        }
-
-        function addBackgroundStars() {
+        function createProceduralStars() {
             const geometry = new THREE.BufferGeometry();
-            const count = 2500;
-            const positions = new Float32Array(count * 3);
-            for (let i = 0; i < count; i++) {
-                const r = starSphereRadius * 1.2;
-                const theta = Math.random() * 2 * Math.PI;
+            const positions = [];
+            
+            for (let i = 0; i < STAR_COUNT; i++) {
+                // Random spherical distribution
+                const r = SPHERE_RADIUS;
+                const theta = 2 * Math.PI * Math.random();
                 const phi = Math.acos(2 * Math.random() - 1);
-                positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-                positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-                positions[i * 3 + 2] = r * Math.cos(phi);
+                
+                const x = r * Math.sin(phi) * Math.cos(theta);
+                const y = r * Math.sin(phi) * Math.sin(theta);
+                const z = r * Math.cos(phi);
+
+                positions.push(x, y, z);
             }
-            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-            const material = new THREE.PointsMaterial({ color: 0x555555, size: 1.5, sizeAttenuation: false });
+
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            
+            const material = new THREE.PointsMaterial({ 
+                color: 0x888888, 
+                size: 2, 
+                sizeAttenuation: false 
+            });
+
             const points = new THREE.Points(geometry, material);
-            celestialGroup.add(points);
+            starContainer.add(points);
         }
 
-        function buildConstellations() {
-            CONSTELLATIONS.forEach(constellation => {
-                const group = new THREE.Group();
-                group.userData = { 
-                    isConstellation: true, 
-                    id: constellation.id, 
-                    name: constellation.name, 
-                    label: constellation.label,
-                    lore: constellation.lore,
-                    source: constellation.source
-                };
-                
+        function createConstellations() {
+            const starTexture = createStarTexture();
+            const material = new THREE.PointsMaterial({ 
+                color: 0xffffff, 
+                size: 15, 
+                map: starTexture, 
+                transparent: true,
+                depthWrite: false
+            });
+
+            const lineMaterial = new THREE.LineBasicMaterial({
+                color: CONSTELLATION_COLOR,
+                transparent: true,
+                opacity: 0.4,
+                linewidth: 2
+            });
+
+            DATABASE.forEach(constellation => {
                 const starPositions = [];
-                
-                // Process compact star data s: [RA, Dec, Mag]
-                if(constellation.s) {
-                    constellation.s.forEach(starData => {
-                        const ra = starData[0];
-                        const dec = starData[1];
-                        const mag = starData[2];
-                        
-                        const pos = sphericalToCartesian(ra, dec, starSphereRadius);
-                        starPositions.push(pos);
-                        
-                        // Scale star size by magnitude (smaller mag = brighter = bigger)
-                        const size = Math.max(0.5, 3.5 - mag); 
-                        
-                        const sGeo = new THREE.SphereGeometry(size, 8, 8);
-                        const sMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-                        const sMesh = new THREE.Mesh(sGeo, sMat);
-                        sMesh.position.copy(pos);
-                        group.add(sMesh);
-                    });
-                }
+                const geometry = new THREE.BufferGeometry();
+                const vertices = []; // For lines
 
-                // Process compact line data l: [idx1, idx2]
-                const lineMat = new THREE.LineBasicMaterial({ color: 0x00ffff, opacity: 0.4, transparent: true });
-                if (constellation.l && constellation.l.length > 0) {
-                    constellation.l.forEach(pair => {
-                        const start = starPositions[pair[0]];
-                        const end = starPositions[pair[1]];
-                        if(start && end) {
-                            const lineGeo = new THREE.BufferGeometry().setFromPoints([start, end]);
-                            const line = new THREE.Line(lineGeo, lineMat);
-                            group.add(line);
-                        }
-                    });
-                }
-
-                // Raycast target (Bounding Sphere)
-                const boundingGeo = new THREE.SphereGeometry(30, 8, 8);
-                const boundingMat = new THREE.MeshBasicMaterial({ visible: false });
-                const boundMesh = new THREE.Mesh(boundingGeo, boundingMat);
-                let center = new THREE.Vector3();
-                if(starPositions.length > 0) {
-                    starPositions.forEach(p => center.add(p));
-                    center.divideScalar(starPositions.length);
-                    boundMesh.position.copy(center);
-                    boundMesh.userData = { parentConstellation: constellation };
-                    // Add userData to the mesh as well for raycasting
-                    boundMesh.userData.lore = constellation.lore;
-                    boundMesh.userData.source = constellation.source;
-                    group.add(boundMesh);
-                }
-
-                celestialGroup.add(group);
-            });
-        }
-
-        // --- CONTROLS ---
-
-        function setupInputHandlers() {
-            const el = document.body;
-            el.addEventListener('mousedown', onPointerDown);
-            el.addEventListener('touchstart', onPointerDown);
-            window.addEventListener('mouseup', onPointerUp);
-            window.addEventListener('touchend', onPointerUp);
-            window.addEventListener('mousemove', onPointerMove);
-            window.addEventListener('touchmove', onPointerMove);
-
-            document.getElementById('start-btn').addEventListener('click', () => {
-                logMsg("Requesting all permissions...");
-                requestSensors();
-            });
-
-            // Calibration Slider
-            document.getElementById('calib-slider').addEventListener('input', (e) => {
-                calibrationOffset = parseInt(e.target.value);
-                updateSkyRotation();
-            });
-        }
-
-        function requestSensors() {
-            // 1. Orientation
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                DeviceOrientationEvent.requestPermission()
-                    .then(response => {
-                        if (response === 'granted') {
-                            window.addEventListener('deviceorientation', handleOrientation);
-                            // Do NOT set isSensorActive = true here blindly.
-                            // Let the event handler confirm we are receiving data.
-                        } else {
-                            alert("Orientation permission denied.");
-                        }
-                    })
-                    .catch(e => {
-                        console.error(e);
-                        alert("Error requesting sensor permission: " + e.message);
-                    });
-            } else {
-                // Non-iOS devices
-                window.addEventListener('deviceorientation', handleOrientation);
-                // Same here, wait for data
-            }
-
-            // 2. Geolocation (For Time/Sky alignment)
-            if ("geolocation" in navigator) {
-                navigator.geolocation.getCurrentPosition((position) => {
-                    alignSky(position.coords.latitude, position.coords.longitude);
-                    document.getElementById('start-overlay').style.display = 'none';
-                }, (err) => {
-                    logMsg("GPS Denied. Sky will be unaligned.");
-                    alert("GPS denied. You must use the slider to align stars manually.");
-                    document.getElementById('start-overlay').style.display = 'none';
+                // 1. Create Stars
+                constellation.stars.forEach(star => {
+                    const pos = raDecToVector(star.ra, star.dec, SPHERE_RADIUS);
+                    starPositions.push(pos.x, pos.y, pos.z);
                 });
-            } else {
-                logMsg("No GPS support.");
-                document.getElementById('start-overlay').style.display = 'none';
-            }
-        }
-
-        function handleOrientation(event) {
-            if (!event.alpha && !event.webkitCompassHeading) return;
-
-            // If we receive valid data, THEN we activate sensor mode
-            isSensorActive = true; 
-
-            const degtorad = Math.PI / 180;
-            
-            // Device Orientation logic
-            const q = new THREE.Quaternion();
-            
-            // iOS vs Android Compass handling
-            let alpha = event.alpha ? degtorad * event.alpha : 0;
-            let beta = event.beta ? degtorad * event.beta : 0;
-            let gamma = event.gamma ? degtorad * event.gamma : 0;
-            const orient = window.orientation ? degtorad * window.orientation : 0;
-
-            if (event.webkitCompassHeading) {
-                // iOS uses webkitCompassHeading for 'North' relative to magnetic north
-                // This is much more accurate for AR
-                alpha = degtorad * -event.webkitCompassHeading;
-                // iOS correction:
-                // We typically need to adjust rotation order or sign when mixing with ThreeJS
-                // For simplicity in this demo, we rely on standard Euler but substitute alpha
-            }
-
-            const zee = new THREE.Vector3(0, 0, 1);
-            const euler = new THREE.Euler();
-            const q0 = new THREE.Quaternion();
-            const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); 
-
-            // Standard mapping
-            euler.set(beta, alpha, -gamma, 'YXZ');
-            q.setFromEuler(euler);
-            q.multiply(q1); 
-            q.multiply(q0.setFromAxisAngle(zee, -orient));
-
-            camera.quaternion.slerp(q, 0.5); 
-        }
-
-        // --- FALLBACK CONTROLS ---
-        function onPointerDown(event) {
-            if(event.target.id === 'calib-slider') return; // Don't drag camera if using slider
-            manualControl.isDragging = true;
-            manualControl.lastX = event.clientX || event.touches[0].clientX;
-            manualControl.lastY = event.clientY || event.touches[0].clientY;
-        }
-
-        function onPointerUp() { manualControl.isDragging = false; }
-
-        function onPointerMove(event) {
-            if (!manualControl.isDragging || isSensorActive) return;
-            const x = event.clientX || event.touches[0].clientX;
-            const y = event.clientY || event.touches[0].clientY;
-            const deltaX = x - manualControl.lastX;
-            const deltaY = y - manualControl.lastY;
-            manualControl.lon -= deltaX * 0.2;
-            manualControl.lat += deltaY * 0.2;
-            manualControl.lat = Math.max(-85, Math.min(85, manualControl.lat));
-            manualControl.lastX = x; manualControl.lastY = y;
-
-            const phi = THREE.Math.degToRad(90 - manualControl.lat);
-            const theta = THREE.Math.degToRad(manualControl.lon);
-            const target = new THREE.Vector3();
-            target.x = 500 * Math.sin(phi) * Math.cos(theta);
-            target.y = 500 * Math.cos(phi);
-            target.z = 500 * Math.sin(phi) * Math.sin(theta);
-            camera.lookAt(target);
-        }
-
-        // --- RAYCASTING ---
-        const raycaster = new THREE.Raycaster();
-        const center = new THREE.Vector2(0, 0);
-
-        function identifyConstellation() {
-            raycaster.setFromCamera(center, camera);
-            // Intersect against the celestialGroup children (which contains constellation groups)
-            // We need to traverse: celestialGroup -> constellationGroup -> boundingSphere
-            
-            // Get all children of celestialGroup (constellation groups)
-            const constellations = celestialGroup.children.filter(c => c.type === 'Group');
-            
-            // Flatten children for intersection
-            let targets = [];
-            constellations.forEach(c => targets.push(...c.children));
-            
-            const intersects = raycaster.intersectObjects(targets);
-            let found = null;
-            
-            for (let i = 0; i < intersects.length; i++) {
-                if (intersects[i].object.userData && intersects[i].object.userData.parentConstellation) {
-                    found = intersects[i].object.userData.parentConstellation;
-                    break;
-                }
-            }
-
-            const infoBox = document.getElementById('target-info');
-            if (found) {
-                document.getElementById('target-name').innerText = found.name;
-                document.getElementById('target-sub').innerText = found.label;
                 
-                // NEW: Update Lore and Source
-                const loreEl = document.getElementById('target-lore');
-                const sourceEl = document.getElementById('target-source');
+                const starGeo = new THREE.BufferGeometry();
+                starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
+                const starPoints = new THREE.Points(starGeo, material);
+                starContainer.add(starPoints);
+
+                // 2. Create Lines
+                constellation.connections.forEach(pair => {
+                    const idx1 = pair[0];
+                    const idx2 = pair[1];
+                    const v1 = new THREE.Vector3(starPositions[idx1*3], starPositions[idx1*3+1], starPositions[idx1*3+2]);
+                    const v2 = new THREE.Vector3(starPositions[idx2*3], starPositions[idx2*3+1], starPositions[idx2*3+2]);
+                    vertices.push(v1.x, v1.y, v1.z);
+                    vertices.push(v2.x, v2.y, v2.z);
+                });
+
+                geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+                const lines = new THREE.LineSegments(geometry, lineMaterial);
+                starContainer.add(lines);
+
+                // 3. Create Interaction Hit Sphere (Invisible center point)
+                // Calculate average position (center of constellation)
+                let cx=0, cy=0, cz=0;
+                let count = constellation.stars.length;
+                for(let i=0; i<starPositions.length; i+=3) {
+                    cx += starPositions[i];
+                    cy += starPositions[i+1];
+                    cz += starPositions[i+2];
+                }
+                const center = new THREE.Vector3(cx/count, cy/count, cz/count);
                 
-                // Check if lore exists in the found object
-                if (found.lore) {
-                    loreEl.innerText = `"${found.lore}"`;
-                    loreEl.style.display = 'block';
-                } else {
-                    loreEl.style.display = 'none';
-                }
-
-                if (found.source) {
-                    sourceEl.innerText = found.source;
-                    sourceEl.style.display = 'block';
-                } else {
-                    sourceEl.style.display = 'none';
-                }
-
-                infoBox.style.opacity = 1;
-            } else {
-                infoBox.style.opacity = 0;
-            }
-            
-            // Display rough DEC
-            const vector = new THREE.Vector3(0, 0, -1);
-            vector.applyQuaternion(camera.quaternion);
-            const dec = 90 - (Math.acos(vector.y) * 180 / Math.PI);
-            document.getElementById('coords').innerText = `DEC: ${dec.toFixed(0)}°`;
+                // Add invisible sphere for raycasting
+                const hitGeo = new THREE.SphereGeometry(40, 8, 8);
+                const hitMat = new THREE.MeshBasicMaterial({ visible: false, wireframe: true });
+                const hitMesh = new THREE.Mesh(hitGeo, hitMat);
+                hitMesh.position.copy(center);
+                hitMesh.userData = { id: constellation.id, name: constellation.name, desc: constellation.desc };
+                
+                starContainer.add(hitMesh);
+                constellationHitSpheres.push(hitMesh);
+            });
         }
+
+        // --- ALIGNMENT LOGIC ---
+
+        function getGreenwichSiderealTime() {
+            const now = new Date();
+            // Julian Date
+            const julian = (now.getTime() / 86400000) + 2440587.5;
+            const D = julian - 2451545.0; // Days since J2000
+            
+            // GMST formula
+            let gmst = 18.697374558 + 24.06570982441908 * D;
+            gmst = gmst % 24;
+            if (gmst < 0) gmst += 24;
+            return gmst;
+        }
+
+        function updateSkyAlignment() {
+            if (!gpsLocked) return;
+
+            const gmst = getGreenwichSiderealTime();
+            // LST = GMST + Longitude (in hours)
+            // Longitude is degrees, convert to hours (deg / 15)
+            const lonHours = userLon / 15;
+            let lst = gmst + lonHours;
+            if (lst < 0) lst += 24;
+            if (lst > 24) lst -= 24;
+
+            // Update HUD
+            const h = Math.floor(lst);
+            const m = Math.floor((lst - h) * 60);
+            document.getElementById('lst-time').innerText = `LST: ${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
+
+            // ROTATE THE SKY CONTAINER
+            // 1. Reset rotation
+            starContainer.rotation.set(0, 0, 0);
+
+            // 2. Adjust for Latitude (Tilt the Pole)
+            // At Lat 90 (North Pole), Celestial Pole is at Zenith (Y).
+            // At Lat 0 (Equator), Celestial Pole is at Horizon (Z).
+            // ThreeJS Y is UP. 
+            // We need to rotate around X axis.
+            // If Lat = 90, no rotation. If Lat = 0, rotate -90 deg (-PI/2).
+            const latRad = userLat * (Math.PI / 180);
+            const latCorrection = (Math.PI / 2) - latRad;
+            starContainer.rotateX(latCorrection);
+
+            // 3. Adjust for LST (Earth's Rotation)
+            // This rotates the sky around the Celestial Pole (now tilted).
+            // LST corresponds to the RA currently at the Meridian.
+            // Rotate around local Y (after tilt) or global Y? 
+            // The stars are defined by RA/Dec. 
+            // We need to rotate the sphere around its own "North" axis.
+            // Since we applied X rotation to the container, the container's Y axis is now the Pole.
+            // We rotate around that axis.
+            // Rotation amount = LST converted to radians.
+            // Stars move East to West. Earth spins West to East.
+            // We need to rotate the sky: -LST * 15deg
+            const lstRad = lst * (Math.PI / 12); // (lst / 24) * 2PI
+            starContainer.rotateY(-lstRad);
+            
+            // Note: Detailed alignment involves transforming coordinate spaces more rigorously,
+            // but for a fun AR visualizer, tilting for Lat and spinning for LST is the core logic.
+        }
+
+        // --- INTERACTION & LOOP ---
 
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
@@ -767,13 +546,126 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
+        function checkInteractions() {
+            // Raycast from center of screen
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+
+            // Check against constellation hit spheres
+            const intersects = raycaster.intersectObjects(constellationHitSpheres);
+
+            const panel = document.getElementById('info-panel');
+            
+            if (intersects.length > 0) {
+                const data = intersects[0].object.userData;
+                document.getElementById('target-name').innerText = data.name;
+                document.getElementById('target-desc').innerText = data.desc;
+                panel.classList.add('active');
+            } else {
+                panel.classList.remove('active');
+            }
+        }
+
         function animate() {
             requestAnimationFrame(animate);
-            identifyConstellation();
+
+            if (controls) controls.update();
+            
+            // Keep alignment updated (time passes)
+            if(gpsLocked) updateSkyAlignment();
+
+            checkInteractions();
             renderer.render(scene, camera);
         }
 
-        init();
+        // --- PERMISSIONS & STARTUP ---
+
+        const btn = document.getElementById('start-btn');
+        const overlay = document.getElementById('start-overlay');
+        const log = document.getElementById('permission-log');
+        const gpsStatus = document.getElementById('gps-status');
+
+        btn.addEventListener('click', async () => {
+            log.innerText = "Requesting System Access...";
+            
+            // 1. Initialize Three.js
+            init();
+
+            // 2. Request DeviceOrientation (iOS 13+ requirement)
+            try {
+                if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    const permission = await DeviceOrientationEvent.requestPermission();
+                    if (permission === 'granted') {
+                        log.innerText = "Sensors: OK. Waiting for GPS...";
+                        setupMobileControls();
+                    } else {
+                        log.innerText = "Sensors: Denied. Using touch controls.";
+                        setupDesktopControls();
+                    }
+                } else {
+                    // Non-iOS 13+ devices or Desktop
+                    log.innerText = "Sensors: Auto/Desktop.";
+                    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+                         setupMobileControls();
+                    } else {
+                         setupDesktopControls();
+                    }
+                }
+            } catch (e) {
+                console.error(e);
+                log.innerText = "Sensor Error. Using manual controls.";
+                setupDesktopControls();
+            }
+
+            // 3. Request GPS
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        userLat = position.coords.latitude;
+                        userLon = position.coords.longitude;
+                        gpsLocked = true;
+                        gpsStatus.innerText = `GPS: LOCKED [${userLat.toFixed(2)}, ${userLon.toFixed(2)}]`;
+                        gpsStatus.style.color = '#00ff00';
+                        
+                        // Initial alignment immediately
+                        updateSkyAlignment();
+                        
+                        // Hide overlay
+                        overlay.style.display = 'none';
+                        animate();
+                    },
+                    (error) => {
+                        console.warn("GPS Denied", error);
+                        gpsStatus.innerText = "GPS: OFF (DEFAULTING)";
+                        gpsStatus.style.color = 'orange';
+                        // Default to Londonish
+                        userLat = 51.5;
+                        userLon = 0;
+                        gpsLocked = true; // Pretend we are locked to enable rotation logic
+                        
+                        overlay.style.display = 'none';
+                        animate();
+                    }
+                );
+            } else {
+                log.innerText = "GPS Not supported.";
+                setTimeout(() => { overlay.style.display = 'none'; animate(); }, 1000);
+            }
+        });
+
+        function setupMobileControls() {
+            deviceControlActive = true;
+            controls = new DeviceOrientationControls(camera);
+            controls.alphaOffset = 0; // Compass alignment adjustment if needed
+        }
+
+        function setupDesktopControls() {
+            deviceControlActive = false;
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableZoom = false;
+            controls.enablePan = false;
+            controls.rotateSpeed = -0.5; // Invert for "looking around" feel
+        }
+
     </script>
 </body>
 </html>
